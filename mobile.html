@@ -135,7 +135,8 @@ let BASE = localStorage.getItem('chat_server') ?? DEFAULT_URL;
 let token = localStorage.getItem('chat_token') || '';
 let me = null, socket = null;
 let chats = [], active = null, messages = [], online = [], users = [];
-let unread = {}, tab = 'chats', search = '', theme = localStorage.getItem('chat_theme') || 'light';
+let unread = {}, tab = localStorage.getItem('chat_tab') || 'chats', search = '', theme = localStorage.getItem('chat_theme') || 'light';
+let savedChatId = localStorage.getItem('chat_active');
 const app = document.getElementById('app');
 
 document.documentElement.dataset.theme = theme;
@@ -245,7 +246,11 @@ function shell(){
     </div>
     ${tab==='chats' ? '<button class="fab" id="fab">+</button>' : ''}
   </div>`;
-  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab=b.dataset.tab; shell(); });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+    tab = b.dataset.tab;
+    localStorage.setItem('chat_tab', tab);
+    shell();
+  });
   document.getElementById('newBtn').onclick = newChatSheet;
   const fab = document.getElementById('fab');
   if (fab) fab.onclick = newChatSheet;
@@ -326,7 +331,8 @@ function renderProfile(){
   };
   document.getElementById('serverRow').onclick = setupScreen;
   document.getElementById('logoutRow').onclick = () => {
-    token=''; me=null; localStorage.removeItem('chat_token');
+    token=''; me=null;
+    ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
     socket?.close(); authScreen();
   };
 }
@@ -397,6 +403,8 @@ function paintMessages(){
 async function openChat(chat){
   if (!chat) return;
   active = chat;
+  savedChatId = null;
+  localStorage.setItem('chat_active', chat.id);
   unread[chat.id] = 0;
   try { messages = await api(`/chats/${chat.id}/messages`); }
   catch(e) { return notify(e.message); }
@@ -417,7 +425,9 @@ async function openChat(chat){
     </form>
   </div>`;
   paintMessages();
-  document.getElementById('back').onclick = () => { active=null; shell(); };
+  document.getElementById('back').onclick = () => {
+    active=null; localStorage.removeItem('chat_active'); shell();
+  };
   document.getElementById('more').onclick = () => notify(`${chat.name} · ${chat.members_count||1} участник(ов)`);
 
   const txt = document.getElementById('txt');
@@ -466,6 +476,12 @@ async function loadChats(){
   try {
     chats = await api('/chats');
     users = await api('/users');
+    // Возвращаемся в последний открытый чат после перезапуска приложения
+    if (savedChatId && !active) {
+      const last = chats.find(c => c.id == savedChatId);
+      savedChatId = null;
+      if (last) { localStorage.removeItem('chat_active'); return openChat(last); }
+    }
     if (tab==='chats') paintChats();
   } catch(e) { notify(e.message); }
 }
@@ -499,11 +515,41 @@ function connectSocket(){
 
 function start(){ shell(); loadChats(); connectSocket(); }
 
+function splash(text){
+  app.innerHTML = `<div class="center"><div style="text-align:center">
+    <div class="logo">💬</div><div class="hint" style="margin-top:10px">${esc(text)}</div>
+  </div></div>`;
+}
+
+function offlineScreen(msg){
+  app.innerHTML = `<div class="center"><form class="auth-box card" id="offForm" style="text-align:center">
+    <div class="logo">📶</div><h1 style="font-size:18px">Нет связи с сервером</h1>
+    <div class="hint" style="margin-bottom:14px">Сессия сохранена на устройстве. Проверьте интернет и попробуйте снова.</div>
+    <div class="err">${esc(msg||'')}</div>
+    <button class="btn" type="submit">Повторить</button>
+    <button type="button" class="link" id="offLogout">Выйти из аккаунта</button>
+  </form></div>`;
+  document.getElementById('offForm').onsubmit = e => { e.preventDefault(); render(); };
+  document.getElementById('offLogout').onclick = () => {
+    token=''; me=null;
+    ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
+    authScreen();
+  };
+}
+
 function render(){
   if (BASE === null) return setupScreen();
   if (!token) return authScreen();
   if (!me) {
-    api('/me').then(u => { me=u; start(); }).catch(() => {
+    splash('Восстанавливаем сессию...');
+    api('/me').then(u => {
+      me = u;
+      localStorage.setItem('chat_last_user', u.username);
+      start();
+    }).catch(err => {
+      const msg = String(err?.message || '');
+      // Сеть недоступна — сохраняем токен и даём повторить позже
+      if (/Failed to fetch|Network|Ошибка сети|timeout|Timeout/i.test(msg)) return offlineScreen(msg);
       token=''; localStorage.removeItem('chat_token'); authScreen();
     });
     return;
