@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#3390ec">
+<title>Chat Manager — Mobile</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--b:#3390ec;--bg:#f4f4f5;--bd:#e6e6e8;--m:#9099a2}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#1f2429;background:var(--bg);overflow:hidden}
+button,input{font:inherit}
+button{cursor:pointer}
+#app{height:100%;display:flex;flex-direction:column}
+
+/* настройка адреса */
+#setup{padding:24px 20px;background:#fff;border-bottom:1px solid var(--bd)}
+#setup label{font-size:12px;color:var(--m);display:block;margin-bottom:6px}
+#setup input{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;outline:none;font-size:14px}
+#setup input:focus{border-color:var(--b)}
+
+/* авторизация */
+.auth{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#e8f3ff,#d4e9ff)}
+.card{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:26px 20px;box-shadow:0 12px 40px rgba(0,0,0,.12)}
+.logo{font-size:42px;text-align:center}
+.card h1{text-align:center;font-size:22px;margin:6px 0 18px}
+.tabs{display:flex;gap:6px;background:#f1f3f5;padding:4px;border-radius:10px;margin-bottom:16px}
+.tabs button{flex:1;border:0;background:none;padding:9px;border-radius:8px;color:var(--m);font-weight:600}
+.tabs button.on{background:#fff;color:var(--b);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.card input{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:10px;outline:none;margin-bottom:12px}
+.card input:focus{border-color:var(--b)}
+.field{display:flex;align-items:center;border:1px solid var(--bd);border-radius:10px;padding-left:14px;margin-bottom:12px}
+.field:focus-within{border-color:var(--b)}
+.field span{color:var(--m)}
+.field input{border:0;margin:0;padding-left:4px}
+.hint{font-size:11px;color:var(--m);margin:-4px 0 14px}
+.err{color:#e03939;font-size:13px;margin-bottom:10px;min-height:16px}
+.primary{width:100%;padding:13px;border:0;border-radius:10px;background:var(--b);color:#fff;font-weight:600}
+.primary:disabled{background:#b9d8f8}
+
+/* основной экран */
+.main{flex:1;display:flex;flex-direction:column;min-height:0;background:#fff}
+.top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bd)}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#8fd0ff,#4fa8f5);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+.top .name{font-weight:600;font-size:16px;flex:1}
+.top .sub{font-size:11px;color:var(--m)}
+.icon{background:#f1f3f5;border:0;border-radius:50%;width:34px;height:34px;font-size:17px;color:#555}
+.list{flex:1;overflow-y:auto}
+.row{width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;border:0;background:none;text-align:left;border-bottom:1px solid #f2f2f3}
+.row.active{background:#eaf4ff}
+.row .info{flex:1;min-width:0}
+.row .n{font-weight:600;font-size:14px}
+.row .p{color:var(--m);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.new{margin:10px 14px;width:calc(100% - 28px);padding:11px;border:0;border-radius:10px;background:#eaf4ff;color:var(--b);font-weight:600}
+
+/* окно чата */
+.chat{flex:1;display:flex;flex-direction:column;min-height:0;background:#f9fafb}
+.msgs{flex:1;overflow-y:auto;padding:14px 12px}
+.empty{text-align:center;color:var(--m);margin-top:50px;font-size:14px}
+.bub{max-width:82%;background:#fff;padding:9px 12px;border-radius:12px 12px 12px 4px;box-shadow:0 1px 2px rgba(0,0,0,.06);margin-bottom:8px}
+.bub.mine{margin-left:auto;background:#e3f2ff;border-radius:12px 12px 4px 12px}
+.author{color:var(--b);font-size:11px;font-weight:600}
+.txt{font-size:14px;line-height:1.4;word-break:break-word;white-space:pre-wrap}
+.time{font-size:9px;color:var(--m);text-align:right;margin-top:2px}
+.comp{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);background:#fff}
+.comp input{flex:1;padding:11px 14px;border:1px solid var(--bd);border-radius:22px;outline:none;min-width:0}
+.comp button{width:42px;height:42px;border:0;border-radius:50%;background:var(--b);color:#fff;font-size:17px}
+.comp button:disabled{background:#b9d8f8}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;z-index:9}
+.sheet{width:100%;background:#fff;border-radius:18px 18px 0 0;padding:20px;max-height:80vh;overflow-y:auto}
+.sheet h3{margin-bottom:12px}
+.sheet label{display:flex;align-items:center;gap:8px;padding:9px 2px;font-size:14px}
+.sheet .sub{font-size:12px;color:var(--m);margin:12px 0 4px}
+.sheet input[type=text]{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;outline:none}
+.actions{display:flex;gap:10px;margin-top:16px}
+.actions button{flex:1;padding:12px;border:0;border-radius:10px}
+.actions .sec{background:#f1f3f5;color:#555}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ============ НАСТРОЙКИ ============
+const SAME_ORIGIN = location.protocol === 'http:' || location.protocol === 'https:';
+let BASE = localStorage.getItem('chat_server') ?? (SAME_ORIGIN ? '' : null);
+let token = localStorage.getItem('chat_token') || '';
+let me = null, socket = null, chats = [], active = null, messages = [], online = [];
+const app = document.getElementById('app');
+
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function avatar(n){return esc((n||'?').charAt(0).toUpperCase())}
+
+async function api(path, opts={}){
+  const r = await fetch(BASE + '/api' + path, {
+    ...opts,
+    headers: {'Content-Type':'application/json', ...(token?{Authorization:'Bearer '+token}:{}), ...(opts.headers||{})}
+  });
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error || 'Ошибка сети');
+  return data;
+}
+
+function toast(msg){alert(msg)}
+
+// ============ ПЕРВИЧНАЯ НАСТРОЙКА АДРЕСА ============
+function setupScreen(){
+  app.innerHTML = `
+    <div id="setup">
+      <label>Адрес сервера чата</label>
+      <input id="url" value="${esc(BASE)}" placeholder="https://...trycloudflare.com">
+    </div>
+    <div class="auth"><div class="card">
+      <div class="logo">💬</div><h1>Chat Manager</h1>
+      <div class="hint">Если ссылка изменилась — вставь новую сюда и нажми «Продолжить».</div>
+      <button class="primary" id="save">Продолжить</button>
+    </div></div>`;
+  document.getElementById('save').onclick = () => {
+    BASE = document.getElementById('url').value.trim().replace(/\/$/,'');
+    localStorage.setItem('chat_server', BASE);
+    render();
+  };
+}
+
+// ============ АВТОРИЗАЦИЯ ============
+let mode = 'register';
+function authScreen(err=''){
+  app.innerHTML = `
+    <div class="auth"><div class="card">
+      <div class="logo">💬</div><h1>Chat Manager</h1>
+      <div class="tabs">
+        <button id="treg" class="${mode==='register'?'on':''}">Регистрация</button>
+        <button id="tlog" class="${mode==='login'?'on':''}">Вход</button>
+      </div>
+      <div class="field"><span>@</span><input id="user" placeholder="юзернейм" autocomplete="username" maxlength="32"></div>
+      <input id="pass" type="password" placeholder="Пароль (от 6 символов)" autocomplete="current-password">
+      ${mode==='register'?'<input id="pass2" type="password" placeholder="Повторите пароль" autocomplete="new-password">':''}
+      <div class="hint">Юзернейм: 5–32 символа, латиница, цифры, _</div>
+      <div class="err">${esc(err)}</div>
+      <button class="primary" id="go">${mode==='register'?'Создать аккаунт':'Войти'}</button>
+      <div class="hint" style="text-align:center;margin-top:12px">
+        <button id="change" style="background:none;border:0;color:var(--b);font-size:12px">Изменить адрес сервера</button>
+      </div>
+    </div></div>`;
+  document.getElementById('treg').onclick=()=>{mode='register';authScreen()};
+  document.getElementById('tlog').onclick=()=>{mode='login';authScreen()};
+  document.getElementById('change').onclick=setupScreen;
+  document.getElementById('go').onclick=async()=>{
+    const username = document.getElementById('user').value.trim();
+    const password = document.getElementById('pass').value;
+    const pass2 = document.getElementById('pass2')?.value;
+    if(mode==='register' && password!==pass2) return authScreen('Пароли не совпадают');
+    try{
+      const data = await api('/'+mode, {method:'POST', body:JSON.stringify({username,password})});
+      token = data.token; me = data.user;
+      localStorage.setItem('chat_token', token);
+      start();
+    }catch(e){authScreen(e.message)}
+  };
+}
+
+// ============ СПИСОК ЧАТОВ ============
+async function loadChats(){
+  try{ chats = await api('/chats'); }catch(e){ return toast(e.message); }
+  renderList();
+}
+
+function renderList(){
+  app.innerHTML = `<div class="main">
+    <div class="top">
+      <div class="avatar">${avatar(me.username)}</div>
+      <div style="flex:1"><div class="name">@${esc(me.username)}</div><div class="sub">в сети</div></div>
+      <button class="icon" id="logout">↪</button>
+    </div>
+    <button class="new" id="new">+ Новый чат</button>
+    <div class="list" id="list"></div>
+  </div>`;
+  document.getElementById('logout').onclick=()=>{
+    token=''; me=null; localStorage.removeItem('chat_token');
+    socket?.close(); render();
+  };
+  document.getElementById('new').onclick=newChatSheet;
+  const list = document.getElementById('list');
+  list.innerHTML = chats.map(c=>`
+    <button class="row" data-id="${c.id}">
+      <div class="avatar">${c.is_group?'👥':avatar(c.name)}</div>
+      <div class="info"><div class="n">${esc(c.name)}</div>
+      <div class="p">${esc(c.last_message||'Сообщений пока нет')}</div></div>
+      <div class="sub">${c.last_time?esc(c.last_time.slice(11,16)):''}</div>
+    </button>`).join('');
+  list.querySelectorAll('.row').forEach(b=>b.onclick=()=>openChat(chats.find(c=>c.id==b.dataset.id)));
+}
+
+function newChatSheet(){
+  const o = document.createElement('div');
+  o.className='modal';
+  o.innerHTML=`<div class="sheet">
+    <h3>Новый чат</h3>
+    <input type="text" id="nm" placeholder="Название чата">
+    <div class="sub">Участники</div>
+    <div id="users">загрузка...</div>
+    <div class="actions"><button class="sec" id="cancel">Отмена</button><button class="primary" id="create">Создать</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick=(e)=>{if(e.target===o)o.remove()};
+  document.getElementById('cancel').onclick=()=>o.remove();
+  api('/users').then(us=>{
+    const box=document.getElementById('users');
+    box.innerHTML = us.length ? us.map(u=>`<label><input type="checkbox" value="${u.id}"> @${esc(u.username)} ${online.includes(u.id)?'🟢':''}</label>`).join('') : '<div class="hint">Других пользователей пока нет</div>';
+  }).catch(()=>{});
+  document.getElementById('create').onclick=async()=>{
+    const name=document.getElementById('nm').value.trim();
+    const ids=[...document.querySelectorAll('#users input:checked')].map(x=>Number(x.value));
+    try{
+      await api('/chats',{method:'POST',body:JSON.stringify({name,memberIds:ids})});
+      o.remove(); loadChats();
+    }catch(e){toast(e.message)}
+  };
+}
+
+// ============ ОКНО ЧАТА ============
+async function openChat(chat){
+  active=chat;
+  try{ messages = await api(`/chats/${chat.id}/messages`); }catch(e){return toast(e.message)}
+  renderChat();
+}
+
+function addMsg(m){
+  if(messages.some(x=>x.id===m.id))return;
+  messages.push(m);
+  const box=document.getElementById('msgs');
+  if(box){ box.insertAdjacentHTML('beforeend', msgHtml(m)); box.scrollTop=box.scrollHeight; }
+  chats = [ {...active, last_message:m.text, last_time:m.created_at}, ...chats.filter(c=>c.id!==active.id) ];
+}
+
+function msgHtml(m){
+  const mine=m.user_id===me.id;
+  return `<div class="bub ${mine?'mine':''}">
+    ${mine?'':`<div class="author">@${esc(m.username)}</div>`}
+    <div class="txt">${esc(m.text)}</div>
+    <div class="time">${esc((m.created_at||'').slice(11,16))}</div>
+  </div>`;
+}
+
+function renderChat(){
+  app.innerHTML=`<div class="main"><div class="chat">
+    <div class="top">
+      <button class="icon" id="back">←</button>
+      <div class="avatar">${active.is_group?'👥':avatar(active.name)}</div>
+      <div style="flex:1"><div class="name">${esc(active.name)}</div><div class="sub" id="sub">${active.members_count||1} участник(ов)</div></div>
+    </div>
+    <div class="msgs" id="msgs">
+      ${messages.length?messages.map(msgHtml).join(''):'<div class="empty">Начните общение 👋</div>'}
+    </div>
+    <form class="comp" id="form">
+      <input id="text" placeholder="Сообщение..." autocomplete="off" maxlength="2000">
+      <button type="submit" id="send">➤</button>
+    </form>
+  </div></div>`;
+  const box=document.getElementById('msgs'); box.scrollTop=box.scrollHeight;
+  document.getElementById('back').onclick=()=>{active=null;renderList()};
+  document.getElementById('form').onsubmit=async(e)=>{
+    e.preventDefault();
+    const inp=document.getElementById('text'), text=inp.value.trim();
+    if(!text)return;
+    inp.value='';
+    try{ addMsg(await api(`/chats/${active.id}/messages`,{method:'POST',body:JSON.stringify({text})})); }
+    catch(err){toast(err.message)}
+  };
+}
+
+// ============ WEBSOCKET ============
+function start(){
+  const base = BASE || location.origin;
+  const wsBase = base.replace(/^http/, 'ws');
+  socket = new WebSocket(wsBase + '/ws?token=' + encodeURIComponent(token));
+  socket.onopen = () => { online = []; };
+  socket.onmessage = (e) => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+    if (data.type === 'users:online') online = data.ids;
+    if (data.type === 'message:new') {
+      const msg = data.message;
+      if (active && msg.chat_id === active.id) addMsg(msg);
+      else loadChats();
+    }
+    if (data.type === 'typing') {
+      const sub = document.getElementById('sub');
+      if (sub) sub.textContent = data.isTyping
+        ? data.username + ' печатает...'
+        : `${active?.members_count||1} участник(ов)`;
+    }
+  };
+  loadChats();
+}
+
+function render(){
+  if(BASE === null){ setupScreen(); return; }
+  if(!token){ authScreen(); return; }
+  if(!me){ api('/me').then(u=>{me=u;start()}).catch(()=>{token='';localStorage.removeItem('chat_token');authScreen()}); return; }
+  start();
+}
+
+render();
+</script>
+</body>
+</html>
