@@ -130,8 +130,8 @@ button{cursor:pointer;border:0;background:none}
 <div id="app"></div>
 <script>
 /* ============ STATE ============ */
-const SAME = location.protocol === 'http:' || location.protocol === 'https:';
-let BASE = localStorage.getItem('chat_server') ?? (SAME ? '' : null);
+const DEFAULT_URL = 'https://chat-manager.reifly231.workers.dev';
+let BASE = localStorage.getItem('chat_server') ?? DEFAULT_URL;
 let token = localStorage.getItem('chat_token') || '';
 let me = null, socket = null;
 let chats = [], active = null, messages = [], online = [], users = [];
