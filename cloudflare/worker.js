@@ -189,6 +189,9 @@ export class ChatRoom extends DurableObject {
       if (method === 'POST') return this.postMessage(user, chatId, body);
     }
 
+    const memberRoute = path.match(/^\/api\/chats\/(\d+)\/members$/);
+    if (memberRoute && method === 'GET') return this.getChatMembers(user, Number(memberRoute[1]));
+
     let mm = path.match(/^\/api\/chats\/(\d+)\/(read|leave|search)$/);
     if (mm) {
       const chatId = Number(mm[1]);
@@ -306,6 +309,21 @@ export class ChatRoom extends DurableObject {
       await hashPassword(password), newCode, user.id);
     this.sql.exec('DELETE FROM tokens WHERE user_id = ?', user.id);
     return json({ ok: true, recoveryCode: newCode });
+  }
+
+  getChatMembers(user, chatId) {
+    const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
+    if (!member) return fail('Нет доступа к чату', 403);
+    const chat = this.sql.exec('SELECT name, is_group FROM chats WHERE id = ?', chatId).toArray()[0];
+    if (!chat) return fail('Чат не найден', 404);
+    return json({
+      chat: { id: chatId, name: chat.name, is_group: chat.is_group },
+      members: this.sql.exec(`
+        SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color
+        FROM chat_members cm JOIN users u ON u.id = cm.user_id
+        WHERE cm.chat_id = ? ORDER BY u.username
+      `, chatId).toArray(),
+    });
   }
 
   getChats(user) {

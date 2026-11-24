@@ -958,6 +958,42 @@ function showReplyBar(){
   bar.querySelector('#rcancel').onclick = () => { replyTo = null; bar.remove(); };
 }
 
+async function groupProfileSheet(chat){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <div style="text-align:center;padding:4px 0 12px">
+      <div class="avatar" style="width:64px;height:64px;margin:0 auto 10px;font-size:26px">${chat.is_group?'👥':initial(chat.name)}</div>
+      <div style="font-weight:700;font-size:18px">${esc(chat.name)}</div>
+      <div class="hint" id="gpSub" style="margin-top:3px">загрузка...</div>
+    </div>
+    <div class="sub">Участники</div>
+    <div id="gpMembers"><div class="hint">загрузка...</div></div>
+    <div class="actions">
+      <button class="sec" id="gpClose">Закрыть</button>
+      ${chat.name !== 'Общий чат' && chat.name !== 'Избранное'
+        ? '<button class="btn" id="gpLeave" style="background:#e34d4d">Покинуть чат</button>' : ''}
+    </div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#gpClose').onclick = () => o.remove();
+  const gpLeave = o.querySelector('#gpLeave');
+  if (gpLeave) gpLeave.onclick = async () => {
+    try { await api(`/chats/${chat.id}/leave`, {method:'POST', body:'{}'}); o.remove(); active=null; shell(); }
+    catch(e) { notify(e.message); }
+  };
+  try {
+    const data = await api(`/chats/${chat.id}/members`);
+    o.querySelector('#gpSub').textContent = `${data.members.length} участник(ов)`;
+    o.querySelector('#gpMembers').innerHTML = data.members.map(u => `
+      <div class="row" style="cursor:default">
+        <div class="avatar sm" style="background:${esc(u.avatar_color||'#4fa8f5')}">${initial(u.display_name||u.username)}${online.includes(u.id)?'<span class="dot"></span>':''}</div>
+        <div class="info"><div class="n">${esc(u.display_name||u.username)}</div><div class="p">@${esc(u.username)}</div></div>
+      </div>`).join('');
+  } catch(e) { o.querySelector('#gpMembers').innerHTML = `<div class="hint">${esc(e.message)}</div>`; }
+}
+
 function chatMenuSheet(chat){
   const o = document.createElement('div');
   o.className = 'overlay';
@@ -1039,8 +1075,12 @@ async function openChat(chat){
   app.innerHTML = `<div class="chat">
     <div class="chat-head">
       <button class="iconbtn" id="back">${I.back}</button>
-      <div class="avatar sm">${chat.is_group?'👥':initial(chat.name)}</div>
-      <div style="flex:1;min-width:0"><div class="nm">${esc(chat.name)}</div><div class="st" id="status">${chat.members_count||1} участник(ов)</div></div>
+      <div id="chatInfo" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;cursor:pointer">
+        <div class="avatar sm">${chat.is_group?'👥':initial(chat.name)}</div>
+        <div style="flex:1;min-width:0"><div class="nm">${esc(chat.name)}</div>
+          <div class="st" id="status">${chat.name==='Избранное' ? '' : `${chat.members_count||1} участник(ов)`}</div>
+        </div>
+      </div>
       <button class="iconbtn" id="searchMsg">${I.search}</button>
       <button class="iconbtn" id="more">${I.more}</button>
     </div>
@@ -1059,6 +1099,7 @@ async function openChat(chat){
   };
   document.getElementById('more').onclick = () => chatMenuSheet(chat);
   document.getElementById('searchMsg').onclick = () => messageSearchSheet(chat);
+  document.getElementById('chatInfo').onclick = () => groupProfileSheet(chat);
 
   const txt = document.getElementById('txt');
   const send = document.getElementById('send');
@@ -1145,7 +1186,7 @@ function connectSocket(){
       if (el) el.innerHTML = d.isTyping
         ? `<span class="typing-dots"><i></i><i></i><i></i></span>${esc(d.username)} печатает…`
         : '';
-      if (st && !d.isTyping) st.textContent = `${active?.members_count||1} участник(ов)`;
+      if (st && !d.isTyping) st.textContent = active?.name === 'Избранное' ? '' : `${active?.members_count||1} участник(ов)`;
     }
     if (d.type === 'message:edited' || d.type === 'reaction:new') {
       if (active && d.message.chat_id === active.id) replaceMessage(d.message);
