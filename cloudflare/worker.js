@@ -38,6 +38,13 @@ function randomToken() {
   return toHex(crypto.getRandomValues(new Uint8Array(24)));
 }
 
+function newRecoveryCode() {
+  const raw = toHex(crypto.getRandomValues(new Uint8Array(6))).toUpperCase();
+  return `${raw.slice(0,4)}-${raw.slice(4,8)}-${raw.slice(8,12)}`;
+}
+
+const normCode = (c) => String(c || '').replace(/[^a-f0-9]/gi, '').toUpperCase();
+
 // ---------- Durable Object: всё состояние чата ----------
 export class ChatRoom extends DurableObject {
   constructor(ctx, env) {
@@ -55,6 +62,7 @@ export class ChatRoom extends DurableObject {
         display_name TEXT,
         bio TEXT,
         avatar_color TEXT,
+        recovery_code TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS tokens (
@@ -106,6 +114,7 @@ export class ChatRoom extends DurableObject {
     // Миграции для старых баз
     for (const [table, col, def] of [
       ['users', 'display_name', 'TEXT'], ['users', 'bio', 'TEXT'], ['users', 'avatar_color', 'TEXT'],
+      ['users', 'recovery_code', 'TEXT'],
       ['messages', 'reply_to', 'INTEGER'], ['messages', 'reactions', 'TEXT'],
       ['messages', 'edited', 'INTEGER DEFAULT 0'], ['messages', 'deleted', 'INTEGER DEFAULT 0'],
     ]) {
@@ -154,10 +163,12 @@ export class ChatRoom extends DurableObject {
 
     if (path === '/api/register' && method === 'POST') return this.register(body, request);
     if (path === '/api/login' && method === 'POST') return this.login(body, request);
+    if (path === '/api/recover' && method === 'POST') return this.recover(body);
 
     const user = this.userFromRequest(request);
     if (!user) return fail('Не авторизован', 401);
 
+    if (path === '/api/recovery-code' && method === 'GET') return this.getRecoveryCode(user);
     if (path === '/api/me' && method === 'GET') return json(user);
     if (path === '/api/me' && method === 'PATCH') return this.updateProfile(user, body);
     if (path === '/api/chats' && method === 'GET') return this.getChats(user);
@@ -213,14 +224,16 @@ export class ChatRoom extends DurableObject {
     if (existing && existing.password_hash) return fail('Этот юзернейм уже занят');
 
     const hash = await hashPassword(password);
+    let recovery = newRecoveryCode();
     let user;
     if (existing) {
-      this.sql.exec('UPDATE users SET password_hash = ? WHERE id = ?', hash, existing.id);
-      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color FROM users WHERE id = ?', existing.id).toArray()[0];
+      this.sql.exec('UPDATE users SET password_hash = ?, recovery_code = COALESCE(recovery_code, ?) WHERE id = ?', hash, recovery, existing.id);
+      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color, recovery_code FROM users WHERE id = ?', existing.id).toArray()[0];
+      recovery = user.recovery_code;
     } else {
       user = this.sql.exec(
-        'INSERT INTO users (username, password_hash, display_name, bio, avatar_color) VALUES (?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color',
-        username, hash, username, '', '#4fa8f5'
+        'INSERT INTO users (username, password_hash, display_name, bio, avatar_color, recovery_code) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color, recovery_code',
+        username, hash, username, '', '#4fa8f5', recovery
       ).toArray()[0];
     }
     this.sql.exec('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', this.generalId, user.id);
@@ -229,7 +242,7 @@ export class ChatRoom extends DurableObject {
       'INSERT INTO tokens (token, user_id, device, ip) VALUES (?, ?, ?, ?)',
       token, user.id, String(body.device || 'Устройство').slice(0, 80), this.clientIp(request)
     );
-    return json({ token, user }, 201);
+    return json({ token, user, recoveryCode: recovery }, 201);
   }
 
   async login(body, request) {
@@ -246,6 +259,30 @@ export class ChatRoom extends DurableObject {
       id: user.id, username: user.username,
       display_name: user.display_name, bio: user.bio, avatar_color: user.avatar_color,
     } });
+  }
+
+  getRecoveryCode(user) {
+    const row = this.sql.exec('SELECT recovery_code FROM users WHERE id = ?', user.id).toArray()[0];
+    if (row?.recovery_code) return json({ code: row.recovery_code });
+    const code = newRecoveryCode();
+    this.sql.exec('UPDATE users SET recovery_code = ? WHERE id = ?', code, user.id);
+    return json({ code });
+  }
+
+  async recover(body) {
+    const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
+    const user = this.sql.exec('SELECT * FROM users WHERE username = ?', username).toArray()[0];
+    const code = normCode(body.recoveryCode);
+    if (!user || !user.recovery_code || normCode(user.recovery_code) !== code)
+      return fail('Неверный юзернейм или код восстановления');
+    const password = String(body.newPassword || '');
+    if (password.length < 6) return fail('Новый пароль должен быть не короче 6 символов');
+
+    const newCode = newRecoveryCode();
+    this.sql.exec('UPDATE users SET password_hash = ?, recovery_code = ? WHERE id = ?',
+      await hashPassword(password), newCode, user.id);
+    this.sql.exec('DELETE FROM tokens WHERE user_id = ?', user.id);
+    return json({ ok: true, recoveryCode: newCode });
   }
 
   getChats(user) {
