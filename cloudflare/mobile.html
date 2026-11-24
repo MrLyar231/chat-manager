@@ -110,6 +110,24 @@ button{cursor:pointer;border:0;background:none}
 .emoji-panel{display:flex;flex-wrap:wrap;gap:3px;padding:7px 10px;background:var(--card);border-top:1px solid var(--bd);max-height:120px;overflow-y:auto}
 .emoji-panel button{font-size:21px;padding:3px}
 
+.bub .reply{border-left:2px solid var(--b);padding-left:7px;margin-bottom:5px;background:rgba(51,144,236,.07);border-radius:4px}
+.bub .ra{color:var(--b);font-size:11px;font-weight:600}
+.bub .rt{font-size:11.5px;color:var(--m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.bub.del .tx{color:var(--m);font-style:italic}
+.reactions{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0 2px}
+.rx{background:var(--in);border-radius:11px;padding:2px 7px;font-size:12px}
+.rx.on{background:var(--b);color:#fff}
+.checks{color:var(--m);font-size:11px}
+.checks.read{color:var(--b)}
+.replybar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--in);font-size:12px}
+.replybar .rb{flex:1;min-width:0}
+.replybar .ra{color:var(--b);font-weight:600}
+.replybar .rt{color:var(--m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msgmenu{padding:6px 0}
+.msgmenu button{display:block;width:100%;text-align:left;padding:11px 16px;font-size:14px}
+.msgmenu button:active{background:var(--in)}
+.emoji-quick{display:flex;gap:8px;padding:8px 14px;justify-content:center;font-size:24px}
+
 /* модалка */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end}
 .sheet{width:100%;background:var(--card);border-radius:18px 18px 0 0;padding:18px;max-height:82vh;overflow-y:auto}
@@ -137,6 +155,7 @@ let me = null, socket = null;
 let chats = [], active = null, messages = [], online = [], users = [];
 let unread = {}, tab = localStorage.getItem('chat_tab') || 'chats', search = '', theme = localStorage.getItem('chat_theme') || 'light';
 let savedChatId = localStorage.getItem('chat_active');
+let replyTo = null, chatSearch = false, chatSearchQ = '';
 const app = document.getElementById('app');
 
 document.documentElement.dataset.theme = theme;
@@ -145,6 +164,23 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const initial = s => esc((s || '?').trim().charAt(0).toUpperCase());
 const hhmm = t => (t || '').slice(11, 16);
 const todayKey = t => (t || '').slice(0, 10);
+
+function deviceName(){
+  const ua = navigator.userAgent || '';
+  let os = 'Устройство';
+  if (/Android/i.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+  else if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+  let br = 'Браузер';
+  if (/Edg\//.test(ua)) br = 'Edge';
+  else if (/OPR\//.test(ua)) br = 'Opera';
+  else if (/Chrome\//.test(ua)) br = 'Chrome';
+  else if (/Firefox\//.test(ua)) br = 'Firefox';
+  else if (/Safari\//.test(ua)) br = 'Safari';
+  return br + ' · ' + os;
+}
 
 function notify(text){
   const old = document.getElementById('toast');
@@ -204,7 +240,7 @@ function authScreen(err = ''){
     if (authMode==='register' && password !== document.getElementById('p2').value)
       return authScreen('Пароли не совпадают');
     try {
-      const data = await api('/' + authMode, {method:'POST', body:JSON.stringify({username,password})});
+      const data = await api('/' + authMode, {method:'POST', body:JSON.stringify({username,password,device:deviceName()})});
       token = data.token; me = data.user;
       localStorage.setItem('chat_token', token);
       localStorage.setItem('chat_last_user', data.user.username);
@@ -288,14 +324,32 @@ function paintChats(){
 
 function renderPeople(){
   const box = document.getElementById('content');
-  box.innerHTML = `<div class="hint" style="padding:12px 14px">Нажми на человека, чтобы начать личную переписку</div><div class="list" id="userList"></div>`;
+  box.innerHTML = `<div class="searchbar"><input id="peopleSearch" placeholder="🔍 Поиск по @юзернейму" autocomplete="off"></div>
+    <div class="list" id="userList"><div class="hint" style="text-align:center;padding:30px">Введите минимум 2 символа юзернейма</div></div>`;
+  const input = document.getElementById('peopleSearch');
+  let timer = null;
+  input.oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => searchPeople(input.value.trim()), 250);
+  };
+}
+
+async function searchPeople(q){
   const el = document.getElementById('userList');
+  if (!el) return;
+  if (q.replace(/^@/, '').length < 2) {
+    el.innerHTML = '<div class="hint" style="text-align:center;padding:30px">Введите минимум 2 символа юзернейма</div>';
+    return;
+  }
+  el.innerHTML = '<div class="hint" style="text-align:center;padding:20px">Ищем...</div>';
+  try { users = await api('/users?q=' + encodeURIComponent(q)); }
+  catch(e) { el.innerHTML = `<div class="hint" style="text-align:center;padding:20px">${esc(e.message)}</div>`; return; }
   el.innerHTML = users.length ? users.map(u => `
     <button class="row" data-id="${u.id}">
       <div class="avatar">${initial(u.username)}${online.includes(u.id)?'<span class="dot"></span>':''}</div>
       <div class="info"><div class="n">@${esc(u.username)}</div><div class="p">${online.includes(u.id)?'в сети':'был(а) недавно'}</div></div>
       <div class="muted" style="font-size:18px">›</div>
-    </button>`).join('') : '<div class="hint" style="text-align:center;padding:30px">Пока нет других пользователей.<br>Пришли ссылку друзьям 👋</div>';
+    </button>`).join('') : '<div class="hint" style="text-align:center;padding:30px">Никого не найдено</div>';
   el.querySelectorAll('.row').forEach(b => b.onclick = async () => {
     const u = users.find(x => x.id == b.dataset.id);
     const exists = chats.find(c => !c.is_group && c.name === '@' + u.username);
@@ -312,12 +366,16 @@ function renderProfile(){
   const box = document.getElementById('content');
   box.innerHTML = `<div style="padding:14px;overflow-y:auto">
     <div class="card" style="padding:16px;text-align:center;margin-bottom:12px">
-      <div class="avatar" style="width:62px;height:62px;font-size:24px;margin:0 auto 9px">${initial(me.username)}</div>
-      <div style="font-weight:700;font-size:17px">@${esc(me.username)}</div>
-      <div class="hint" style="margin-top:3px">в сети</div>
+      <div class="avatar" style="width:62px;height:62px;font-size:24px;margin:0 auto 9px;background:${esc(me.avatar_color||'#4fa8f5')}">${initial(me.display_name||me.username)}</div>
+      <div style="font-weight:700;font-size:17px">${esc(me.display_name||me.username)}</div>
+      <div class="hint" style="margin-top:2px">@${esc(me.username)}</div>
+      <div class="hint" style="margin-top:5px">${esc(me.bio||'')}</div>
+      <button class="btn sec" id="editProfile" style="margin-top:12px;font-size:13px">Изменить профиль</button>
     </div>
     <div class="card" style="padding:0 14px">
+      <div class="settings-row" style="cursor:pointer" id="savedRow"><span>⭐ Избранное</span><span class="hint">›</span></div>
       <div class="settings-row"><span>🌙 Тёмная тема</span><div class="switch ${theme==='dark'?'on':''}" id="themeSw"></div></div>
+      <div class="settings-row" style="cursor:pointer" id="sessionsRow"><span>📱 Сессии и устройства</span><span class="hint">›</span></div>
       <div class="settings-row" style="cursor:pointer" id="serverRow"><span>🌐 Адрес сервера</span><span class="hint">${esc(BASE||'текущий')}</span></div>
       <div class="settings-row" style="border:0;cursor:pointer;color:#e34d4d" id="logoutRow"><span>↪ Выйти из аккаунта</span><span>›</span></div>
     </div>
@@ -329,12 +387,119 @@ function renderProfile(){
     localStorage.setItem('chat_theme', theme);
     renderProfile();
   };
+  document.getElementById('editProfile').onclick = profileEditSheet;
+  document.getElementById('savedRow').onclick = openSaved;
+  document.getElementById('sessionsRow').onclick = sessionsSheet;
   document.getElementById('serverRow').onclick = setupScreen;
   document.getElementById('logoutRow').onclick = () => {
     token=''; me=null;
     ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
     socket?.close(); authScreen();
   };
+}
+
+/* ============ ПРОФИЛЬ ============ */
+function profileEditSheet(){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>Редактировать профиль</h3>
+    <input class="inp" id="dn" placeholder="Имя" maxlength="40" value="${esc(me.display_name||me.username)}">
+    <textarea class="inp" id="bio" rows="2" placeholder="О себе" maxlength="160" style="margin-top:10px">${esc(me.bio||'')}</textarea>
+    <div class="sub">Цвет аватара</div>
+    <div id="colors" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${['#4fa8f5','#e34d4d','#3aca6d','#9b59b6','#f39c12','#1abc9c'].map(c =>
+        `<button data-color="${c}" style="width:32px;height:32px;border-radius:50%;background:${c};border:3px solid ${c===me.avatar_color?'#fff':'transparent'}"></button>`).join('')}
+    </div>
+    <div class="actions"><button class="sec" id="peC">Отмена</button><button class="btn" id="peS">Сохранить</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  let color = me.avatar_color || '#4fa8f5';
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelectorAll('[data-color]').forEach(b => b.onclick = () => {
+    color = b.dataset.color;
+    o.querySelectorAll('[data-color]').forEach(x => x.style.border = `3px solid ${x.dataset.color===color?'#fff':'transparent'}`);
+  });
+  o.querySelector('#peC').onclick = () => o.remove();
+  o.querySelector('#peS').onclick = async () => {
+    try {
+      me = await api('/me', {method:'PATCH', body:JSON.stringify({displayName:o.querySelector('#dn').value, bio:o.querySelector('#bio').value, avatarColor:color})});
+      localStorage.setItem('chat_last_user', me.username);
+      o.remove(); renderProfile();
+    } catch(e) { notify(e.message); }
+  };
+}
+
+async function openSaved(){
+  let saved = chats.find(c => c.name === 'Избранное');
+  if (!saved) {
+    try {
+      const c = await api('/chats', {method:'POST', body:JSON.stringify({name:'Избранное', memberIds:[]})});
+      await loadChats();
+      saved = chats.find(x => x.id === c.id);
+    } catch(e) { return notify(e.message); }
+  }
+  openChat(saved);
+}
+
+/* ============ СЕССИИ ============ */
+async function sessionsSheet(){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>Сессии и устройства</h3>
+    <div id="sess"><div class="hint">Загрузка...</div></div>
+    <div class="actions">
+      <button class="sec" id="closeSess">Закрыть</button>
+      <button class="btn" id="revokeAll">Завершить остальные</button>
+    </div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#closeSess').onclick = () => o.remove();
+
+  async function paint(){
+    let list;
+    try { list = await api('/sessions'); }
+    catch(e) { o.querySelector('#sess').innerHTML = `<div class="hint">${esc(e.message)}</div>`; return; }
+    o.querySelector('#sess').innerHTML = list.map(s => {
+      const short = s.token.slice(0, 6) + '…' + s.token.slice(-4);
+      return `<div class="card" style="padding:12px;margin-bottom:9px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <div class="avatar sm">📱</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${esc(s.device)}</div>
+            <div class="hint">${s.ip ? esc(s.ip) + ' · ' : ''}${esc(s.last_seen || '')} · ${short}</div>
+          </div>
+          ${s.current ? '<span class="hint" style="color:var(--b)">это устройство</span>' : ''}
+        </div>
+        <div class="actions" style="margin-top:9px">
+          ${s.current
+            ? '<button class="sec" data-logout>Выйти здесь</button>'
+            : `<button class="sec" data-revoke="${esc(s.token)}">Завершить</button>`}
+        </div>
+      </div>`;
+    }).join('');
+    o.querySelectorAll('[data-revoke]').forEach(b => b.onclick = async () => {
+      try {
+        await api('/sessions/revoke', {method:'POST', body:JSON.stringify({token:b.dataset.revoke})});
+        paint(); notify('Сессия завершена');
+      } catch(e) { notify(e.message); }
+    });
+    const lo = o.querySelector('[data-logout]');
+    if (lo) lo.onclick = () => {
+      token = ''; me = null;
+      ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
+      socket?.close(); o.remove(); authScreen();
+    };
+  }
+  o.querySelector('#revokeAll').onclick = async () => {
+    try {
+      await api('/sessions/revoke-others', {method:'POST', body:'{}'});
+      paint(); notify('Остальные сессии завершены');
+    } catch(e) { notify(e.message); }
+  };
+  paint();
 }
 
 /* ============ НОВЫЙ ЧАТ ============ */
@@ -344,21 +509,37 @@ function newChatSheet(){
   o.innerHTML = `<div class="sheet">
     <h3>Новый чат</h3>
     <input class="inp" id="nm" placeholder="Название чата" maxlength="40">
-    <div class="sub">Выберите участников</div>
-    <div id="pick"><div class="hint">загрузка...</div></div>
+    <div class="sub">Поиск участников</div>
+    <input class="inp" id="peopleQ" placeholder="@юзернейм" autocomplete="off">
+    <div id="pick"><div class="hint" style="margin-top:8px">Введите минимум 2 символа</div></div>
     <div class="actions"><button class="sec" id="cancel">Отмена</button><button class="btn" id="create">Создать</button></div>
   </div>`;
   document.body.appendChild(o);
   o.onclick = e => { if (e.target === o) o.remove(); };
   document.getElementById('cancel').onclick = () => o.remove();
-  api('/users').then(list => {
-    users = list;
-    document.getElementById('pick').innerHTML = list.length
-      ? list.map(u => `<label><input type="checkbox" value="${u.id}"><div class="avatar sm">${initial(u.username)}</div>@${esc(u.username)} ${online.includes(u.id)?'🟢':''}</label>`).join('')
-      : '<div class="hint">Других пользователей пока нет</div>';
-  }).catch(e => notify(e.message));
-  document.getElementById('create').onclick = async () => {
-    const name = document.getElementById('nm').value.trim();
+
+  const pick = o.querySelector('#pick');
+  let timer = null;
+  o.querySelector('#peopleQ').oninput = e => {
+    clearTimeout(timer);
+    const q = e.target.value.trim();
+    timer = setTimeout(async () => {
+      if (q.replace(/^@/, '').length < 2) {
+        pick.innerHTML = '<div class="hint" style="margin-top:8px">Введите минимум 2 символа</div>';
+        return;
+      }
+      pick.innerHTML = '<div class="hint" style="margin-top:8px">Ищем...</div>';
+      try {
+        const list = await api('/users?q=' + encodeURIComponent(q));
+        pick.innerHTML = list.length
+          ? list.map(u => `<label><input type="checkbox" value="${u.id}"><div class="avatar sm">${initial(u.username)}</div>@${esc(u.username)} ${online.includes(u.id)?'🟢':''}</label>`).join('')
+          : '<div class="hint" style="margin-top:8px">Никого не найдено</div>';
+      } catch(err) { pick.innerHTML = `<div class="hint">${esc(err.message)}</div>`; }
+    }, 250);
+  };
+
+  o.querySelector('#create').onclick = async () => {
+    const name = o.querySelector('#nm').value.trim();
     const memberIds = [...o.querySelectorAll('#pick input:checked')].map(x => Number(x.value));
     if (!name) return notify('Введите название чата');
     try {
@@ -378,12 +559,29 @@ function dateLabel(ts){
   return k;
 }
 
+function reactionsHtml(m){
+  let r = {};
+  try { r = JSON.parse(m.reactions || '{}'); } catch {}
+  const keys = Object.keys(r);
+  if (!keys.length) return '';
+  return `<div class="reactions">${keys.map(e =>
+    `<button class="rx ${r[e].includes(me.id)?'on':''}" data-react="${esc(e)}" data-mid="${m.id}">${e} ${r[e].length}</button>`
+  ).join('')}</div>`;
+}
+
 function msgHtml(m){
   const mine = m.user_id === me.id;
-  return `<div class="bub ${mine?'mine':''}">
-    ${mine?'':`<div class="au">@${esc(m.username)}</div>`}
-    <div class="tx">${esc(m.text)}</div>
-    <div class="tm">${hhmm(m.created_at)}</div>
+  const name = m.display_name || m.username;
+  const reply = m.reply_to
+    ? `<div class="reply"><div class="ra">@${esc(m.reply_username||'')}</div><div class="rt">${esc(m.reply_text||'')}</div></div>` : '';
+  const text = m.deleted ? '<i>сообщение удалено</i>' : esc(m.text);
+  const check = mine ? `<span class="checks ${(active?.read_id||0) >= m.id ? 'read' : ''}">✓✓</span>` : '';
+  return `<div class="bub ${mine?'mine':''} ${m.deleted?'del':''}" data-mid="${m.id}">
+    ${reply}
+    ${mine?'':`<div class="au" style="color:${esc(m.avatar_color||'#3390ec')}">@${esc(name)}</div>`}
+    <div class="tx">${text}</div>
+    ${reactionsHtml(m)}
+    <div class="tm">${m.edited?'изм. ':''}${hhmm(m.created_at)} ${check}</div>
   </div>`;
 }
 
@@ -398,6 +596,179 @@ function paintMessages(){
   }
   box.innerHTML = html || '<div class="hint" style="text-align:center;margin-top:40px">Начните общение 👋</div>';
   box.scrollTop = box.scrollHeight;
+
+  box.querySelectorAll('.bub').forEach(el => {
+    const id = Number(el.dataset.mid);
+    let timer = null;
+    el.addEventListener('touchstart', () => { timer = setTimeout(() => openMsgMenu(id), 500); }, {passive:true});
+    ['touchend','touchmove','touchcancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(timer), {passive:true}));
+    el.addEventListener('contextmenu', e => { e.preventDefault(); openMsgMenu(id); });
+  });
+  box.querySelectorAll('[data-react]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    reactMsg(Number(b.dataset.mid), b.dataset.react);
+  });
+}
+
+async function reactMsg(id, emoji){
+  try {
+    const m = await api(`/messages/${id}/react`, {method:'POST', body:JSON.stringify({emoji})});
+    replaceMessage(m);
+  } catch(e) { notify(e.message); }
+}
+
+function replaceMessage(m){
+  const i = messages.findIndex(x => x.id === m.id);
+  if (i >= 0) messages[i] = m;
+  paintMessages();
+}
+
+function openMsgMenu(id){
+  const m = messages.find(x => x.id === id);
+  if (!m || m.deleted) return;
+  const mine = m.user_id === me.id;
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <div class="msgmenu">
+      <button data-act="reply">↩ Ответить</button>
+      <button data-act="react">😊 Поставить реакцию</button>
+      <button data-act="copy">⧉ Копировать текст</button>
+      ${mine ? '<button data-act="edit">✎ Изменить</button><button data-act="delete" style="color:#e34d4d">🗑 Удалить</button>' : ''}
+      <button data-act="close" class="muted">Отмена</button>
+    </div>
+    <div class="emoji-quick">${['👍','🔥','❤️','😂','😮','😢','🙏','💯'].map(e=>`<button data-emoji="${e}">${e}</button>`).join('')}</div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+    const act = b.dataset.act;
+    o.remove();
+    if (act === 'close') return;
+    if (act === 'reply') { replyTo = m.id; showReplyBar(); }
+    if (act === 'copy') { try { await navigator.clipboard.writeText(m.text); notify('Скопировано'); } catch { notify(m.text); } }
+    if (act === 'edit') editMsgSheet(m);
+    if (act === 'delete') deleteMsgSheet(m);
+    if (act === 'react') openMsgMenu(id);
+  });
+  o.querySelectorAll('[data-emoji]').forEach(b => b.onclick = () => { o.remove(); reactMsg(id, b.dataset.emoji); });
+}
+
+function editMsgSheet(m){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>Изменить сообщение</h3>
+    <textarea class="inp" id="editText" rows="3" maxlength="2000">${esc(m.text)}</textarea>
+    <div class="actions"><button class="sec" id="ec">Отмена</button><button class="btn" id="es">Сохранить</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#ec').onclick = () => o.remove();
+  o.querySelector('#es').onclick = async () => {
+    try {
+      const updated = await api(`/messages/${m.id}/edit`, {method:'PATCH', body:JSON.stringify({text:o.querySelector('#editText').value})});
+      replaceMessage(updated); o.remove();
+    } catch(e) { notify(e.message); }
+  };
+}
+
+function deleteMsgSheet(m){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>Удалить сообщение?</h3>
+    <div class="hint" style="margin-bottom:12px">Сообщение будет удалено у всех участников чата.</div>
+    <div class="actions"><button class="sec" id="dc">Отмена</button><button class="btn" id="dd" style="background:#e34d4d">Удалить</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#dc').onclick = () => o.remove();
+  o.querySelector('#dd').onclick = async () => {
+    try { await api(`/messages/${m.id}/delete`, {method:'DELETE'}); o.remove(); }
+    catch(e) { notify(e.message); }
+  };
+}
+
+function showReplyBar(){
+  let bar = document.getElementById('replyBar');
+  const m = messages.find(x => x.id === replyTo);
+  if (!m) { bar?.remove(); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'replyBar'; bar.className = 'replybar';
+    const form = document.getElementById('form');
+    form.parentNode.insertBefore(bar, form);
+  }
+  bar.innerHTML = `<div class="rb"><div class="ra">Ответ @${esc(m.username)}</div><div class="rt">${esc(m.text)}</div></div><button id="rcancel">✕</button>`;
+  bar.querySelector('#rcancel').onclick = () => { replyTo = null; bar.remove(); };
+}
+
+function chatMenuSheet(chat){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>${esc(chat.name)}</h3>
+    <div class="msgmenu">
+      <button data-act="search">🔍 Поиск по сообщениям</button>
+      <button data-act="members">👥 Участники · ${chat.members_count||1}</button>
+      <button data-act="mute">🔔 Уведомления</button>
+      ${chat.name !== 'Общий чат' ? '<button data-act="leave" style="color:#e34d4d">↪ Покинуть чат</button>' : ''}
+      <button data-act="close" class="muted">Отмена</button>
+    </div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+    const act = b.dataset.act; o.remove();
+    if (act === 'close') return;
+    if (act === 'search') return messageSearchSheet(chat);
+    if (act === 'members') return notify(`В чате ${chat.members_count||1} участник(ов)`);
+    if (act === 'mute') {
+      const key = 'chat_mute_' + chat.id;
+      const muted = !localStorage.getItem(key);
+      muted ? localStorage.setItem(key,'1') : localStorage.removeItem(key);
+      return notify(muted ? 'Уведомления выключены' : 'Уведомления включены');
+    }
+    if (act === 'leave') {
+      try { await api(`/chats/${chat.id}/leave`, {method:'POST', body:'{}'}); active=null; shell(); notify('Вы покинули чат'); }
+      catch(e) { notify(e.message); }
+    }
+  });
+}
+
+function messageSearchSheet(chat){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3>Поиск по сообщениям</h3>
+    <input class="inp" id="mq" placeholder="Введите текст" autocomplete="off">
+    <div id="mres" style="margin-top:10px"><div class="hint">Минимум 2 символа</div></div>
+    <div class="actions"><button class="sec" id="mclose">Закрыть</button><button class="btn" id="mback">Весь чат</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#mclose').onclick = () => o.remove();
+  o.querySelector('#mback').onclick = async () => {
+    messages = await api(`/chats/${chat.id}/messages`); paintMessages(); o.remove();
+  };
+  let t = null;
+  o.querySelector('#mq').oninput = e => {
+    clearTimeout(t);
+    const q = e.target.value.trim();
+    t = setTimeout(async () => {
+      if (q.length < 2) { o.querySelector('#mres').innerHTML = '<div class="hint">Минимум 2 символа</div>'; return; }
+      try {
+        const res = await api(`/chats/${chat.id}/search?q=${encodeURIComponent(q)}`);
+        o.querySelector('#mres').innerHTML = res.length ? res.map(m =>
+          `<button class="row" data-mid="${m.id}"><div class="info"><div class="n">@${esc(m.username)}</div><div class="p">${esc(m.text)}</div></div><div class="t">${hhmm(m.created_at)}</div></button>`
+        ).join('') : '<div class="hint" style="padding:15px">Ничего не найдено</div>';
+        o.querySelectorAll('[data-mid]').forEach(b => b.onclick = () => {
+          messages = res; paintMessages(); o.remove();
+        });
+      } catch(err) { notify(err.message); }
+    }, 250);
+  };
 }
 
 async function openChat(chat){
@@ -406,13 +777,17 @@ async function openChat(chat){
   savedChatId = null;
   localStorage.setItem('chat_active', chat.id);
   unread[chat.id] = 0;
+  replyTo = null; chatSearch = false;
   try { messages = await api(`/chats/${chat.id}/messages`); }
   catch(e) { return notify(e.message); }
+  const lastId = messages.length ? messages[messages.length - 1].id : 0;
+  api(`/chats/${chat.id}/read`, {method:'POST', body:JSON.stringify({lastMessageId:lastId})}).catch(()=>{});
   app.innerHTML = `<div class="chat">
     <div class="chat-head">
       <button class="iconbtn" id="back">←</button>
       <div class="avatar sm">${chat.is_group?'👥':initial(chat.name)}</div>
       <div style="flex:1;min-width:0"><div class="nm">${esc(chat.name)}</div><div class="st" id="status">${chat.members_count||1} участник(ов)</div></div>
+      <button class="iconbtn" id="searchMsg">🔍</button>
       <button class="iconbtn" id="more">⋯</button>
     </div>
     <div class="msgs" id="msgs"></div>
@@ -428,7 +803,8 @@ async function openChat(chat){
   document.getElementById('back').onclick = () => {
     active=null; localStorage.removeItem('chat_active'); shell();
   };
-  document.getElementById('more').onclick = () => notify(`${chat.name} · ${chat.members_count||1} участник(ов)`);
+  document.getElementById('more').onclick = () => chatMenuSheet(chat);
+  document.getElementById('searchMsg').onclick = () => messageSearchSheet(chat);
 
   const txt = document.getElementById('txt');
   const send = document.getElementById('send');
@@ -448,7 +824,10 @@ async function openChat(chat){
     txt.value = ''; txt.style.height = 'auto'; send.disabled = true;
     clearTimeout(typingTimer);
     socket?.send(JSON.stringify({type:'typing', chatId:chat.id, isTyping:false}));
-    try { addMessage(await api(`/chats/${chat.id}/messages`, {method:'POST', body:JSON.stringify({text})})); }
+    const withReply = replyTo;
+    replyTo = null;
+    document.getElementById('replyBar')?.remove();
+    try { addMessage(await api(`/chats/${chat.id}/messages`, {method:'POST', body:JSON.stringify({text, replyTo:withReply})})); }
     catch(err) { notify(err.message); }
   };
 
@@ -467,7 +846,7 @@ function addMessage(m){
   if (messages.some(x => x.id === m.id)) return;
   messages.push(m);
   paintMessages();
-  chats = [{...active, last_message:m.text, last_time:m.created_at}, ...chats.filter(c=>c.id!==active.id)];
+  chats = [{...active, last_message:m.text, last_time:m.created_at, last_id:m.id, read_id:active.read_id||0}, ...chats.filter(c=>c.id!==active.id)];
   if (tab !== 'chats' || !active || active.id !== m.chat_id) unread[m.chat_id] = (unread[m.chat_id]||0) + 1;
 }
 
@@ -475,7 +854,8 @@ function addMessage(m){
 async function loadChats(){
   try {
     chats = await api('/chats');
-    users = await api('/users');
+    unread = {};
+    chats.forEach(c => { if ((c.last_id || 0) > (c.read_id || 0)) unread[c.id] = c.last_id - c.read_id; });
     // Возвращаемся в последний открытый чат после перезапуска приложения
     if (savedChatId && !active) {
       const last = chats.find(c => c.id == savedChatId);
@@ -505,11 +885,28 @@ function connectSocket(){
       }
     }
     if (d.type === 'typing') {
+      if (d.chatId && active && d.chatId !== active.id) return;
       const el = document.getElementById('typing');
       const st = document.getElementById('status');
       if (el) el.textContent = d.isTyping ? `${d.username} печатает…` : '';
       if (st && !d.isTyping) st.textContent = `${active?.members_count||1} участник(ов)`;
     }
+    if (d.type === 'message:edited' || d.type === 'reaction:new') {
+      if (active && d.message.chat_id === active.id) replaceMessage(d.message);
+      else loadChats();
+    }
+    if (d.type === 'message:deleted') {
+      if (active && d.chatId === active.id) {
+        const m = messages.find(x => x.id === d.id);
+        if (m) { m.deleted = 1; m.text = ''; paintMessages(); }
+      }
+    }
+    if (d.type === 'read:update') {
+      chats = chats.map(c => c.id === d.chatId ? {...c, read_id: Math.max(c.read_id||0, d.lastMessageId||0)} : c);
+      if (active && active.id === d.chatId) { active.read_id = d.lastMessageId; paintMessages(); }
+      if (tab==='chats') paintChats();
+    }
+    if (d.type === 'profile:updated' && d.user.id === me?.id) me = d.user;
   };
 }
 

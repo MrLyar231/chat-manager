@@ -52,12 +52,28 @@ export class ChatRoom extends DurableObject {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT,
+        display_name TEXT,
+        bio TEXT,
+        avatar_color TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS tokens (
         token TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id)
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        device TEXT,
+        ip TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        last_seen TEXT DEFAULT (datetime('now'))
       );
+    `);
+    // Миграция для уже существующей базы сессий
+    const tokenCols = this.sql.exec('PRAGMA table_info(tokens)').toArray();
+    for (const col of ['device', 'ip', 'created_at', 'last_seen']) {
+      if (!tokenCols.some((c) => c.name === col)) {
+        this.sql.exec(`ALTER TABLE tokens ADD COLUMN ${col} TEXT`);
+      }
+    }
+    this.sql.exec(`
       CREATE TABLE IF NOT EXISTS chats (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -74,9 +90,28 @@ export class ChatRoom extends DurableObject {
         chat_id INTEGER NOT NULL REFERENCES chats(id),
         user_id INTEGER NOT NULL REFERENCES users(id),
         text TEXT NOT NULL,
+        reply_to INTEGER,
+        reactions TEXT,
+        edited INTEGER DEFAULT 0,
+        deleted INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS chat_reads (
+        chat_id INTEGER NOT NULL REFERENCES chats(id),
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        last_message_id INTEGER DEFAULT 0,
+        PRIMARY KEY (chat_id, user_id)
+      );
     `);
+    // Миграции для старых баз
+    for (const [table, col, def] of [
+      ['users', 'display_name', 'TEXT'], ['users', 'bio', 'TEXT'], ['users', 'avatar_color', 'TEXT'],
+      ['messages', 'reply_to', 'INTEGER'], ['messages', 'reactions', 'TEXT'],
+      ['messages', 'edited', 'INTEGER DEFAULT 0'], ['messages', 'deleted', 'INTEGER DEFAULT 0'],
+    ]) {
+      const cols = this.sql.exec(`PRAGMA table_info(${table})`).toArray();
+      if (!cols.some((c) => c.name === col)) this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    }
     const g = this.sql.exec("SELECT id FROM chats WHERE name = 'Общий чат'").toArray();
     if (!g.length) this.sql.exec("INSERT INTO chats (name, is_group) VALUES ('Общий чат', 1)");
   }
@@ -84,14 +119,19 @@ export class ChatRoom extends DurableObject {
   userByToken(token) {
     if (!token) return null;
     return this.sql.exec(`
-      SELECT u.id, u.username FROM tokens t
+      SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color FROM tokens t
       JOIN users u ON u.id = t.user_id WHERE t.token = ?
     `, token).toArray()[0] || null;
   }
 
   userFromRequest(request) {
-    const auth = request.headers.get('Authorization') || '';
-    return this.userByToken(auth.replace(/^Bearer\s+/i, ''));
+    const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const user = this.userByToken(token);
+    if (user) {
+      user._token = token;
+      this.sql.exec("UPDATE tokens SET last_seen = datetime('now') WHERE token = ?", token);
+    }
+    return user;
   }
 
   get generalId() {
@@ -108,19 +148,23 @@ export class ChatRoom extends DurableObject {
     if (path === '/ws') return this.handleSocket(request, url);
 
     let body = {};
-    if (method === 'POST') {
+    if (['POST', 'PATCH', 'PUT'].includes(method)) {
       try { body = await request.json(); } catch { return fail('Некорректный JSON'); }
     }
 
-    if (path === '/api/register' && method === 'POST') return this.register(body);
-    if (path === '/api/login' && method === 'POST') return this.login(body);
+    if (path === '/api/register' && method === 'POST') return this.register(body, request);
+    if (path === '/api/login' && method === 'POST') return this.login(body, request);
 
     const user = this.userFromRequest(request);
     if (!user) return fail('Не авторизован', 401);
 
-    if (path === '/api/me') return json(user);
+    if (path === '/api/me' && method === 'GET') return json(user);
+    if (path === '/api/me' && method === 'PATCH') return this.updateProfile(user, body);
     if (path === '/api/chats' && method === 'GET') return this.getChats(user);
-    if (path === '/api/users' && method === 'GET') return this.getUsers(user);
+    if (path === '/api/users' && method === 'GET') return this.searchUsers(user, url.searchParams.get('q'));
+    if (path === '/api/sessions' && method === 'GET') return this.getSessions(user);
+    if (path === '/api/sessions/revoke' && method === 'POST') return this.revokeSession(user, body);
+    if (path === '/api/sessions/revoke-others' && method === 'POST') return this.revokeOthers(user);
     if (path === '/api/chats' && method === 'POST') return this.createChat(user, body);
 
     const m = path.match(/^\/api\/chats\/(\d+)\/messages$/);
@@ -130,10 +174,35 @@ export class ChatRoom extends DurableObject {
       if (method === 'POST') return this.postMessage(user, chatId, body);
     }
 
+    let mm = path.match(/^\/api\/chats\/(\d+)\/(read|leave|search)$/);
+    if (mm) {
+      const chatId = Number(mm[1]);
+      if (mm[2] === 'read' && method === 'POST') return this.markRead(user, chatId, body);
+      if (mm[2] === 'leave' && method === 'POST') return this.leaveChat(user, chatId);
+      if (mm[2] === 'search' && method === 'GET') return this.searchMessages(user, chatId, url.searchParams.get('q'));
+    }
+
+    const msg = path.match(/^\/api\/messages\/(\d+)\/(edit|delete|react)$/);
+    if (msg) {
+      const messageId = Number(msg[1]);
+      if (msg[2] === 'edit' && method === 'PATCH') return this.editMessage(user, messageId, body);
+      if (msg[2] === 'delete' && method === 'DELETE') return this.deleteMessage(user, messageId);
+      if (msg[2] === 'react' && method === 'POST') return this.reactMessage(user, messageId, body);
+    }
+
     return fail('Не найдено', 404);
   }
 
-  async register(body) {
+  clientIp(request) {
+    return (
+      request.headers.get('cf-connecting-ip') ||
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      ''
+    );
+  }
+
+  async register(body, request) {
     const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
     if (!/^[a-z0-9_]{5,32}$/.test(username))
       return fail('Юзернейм: 5–32 символа, только латиница, цифры и _');
@@ -147,27 +216,36 @@ export class ChatRoom extends DurableObject {
     let user;
     if (existing) {
       this.sql.exec('UPDATE users SET password_hash = ? WHERE id = ?', hash, existing.id);
-      user = this.sql.exec('SELECT id, username FROM users WHERE id = ?', existing.id).toArray()[0];
+      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color FROM users WHERE id = ?', existing.id).toArray()[0];
     } else {
       user = this.sql.exec(
-        'INSERT INTO users (username, password_hash) VALUES (?, ?) RETURNING id, username',
-        username, hash
+        'INSERT INTO users (username, password_hash, display_name, bio, avatar_color) VALUES (?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color',
+        username, hash, username, '', '#4fa8f5'
       ).toArray()[0];
     }
     this.sql.exec('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', this.generalId, user.id);
     const token = randomToken();
-    this.sql.exec('INSERT INTO tokens (token, user_id) VALUES (?, ?)', token, user.id);
+    this.sql.exec(
+      'INSERT INTO tokens (token, user_id, device, ip) VALUES (?, ?, ?, ?)',
+      token, user.id, String(body.device || 'Устройство').slice(0, 80), this.clientIp(request)
+    );
     return json({ token, user }, 201);
   }
 
-  async login(body) {
+  async login(body, request) {
     const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
     const user = this.sql.exec('SELECT * FROM users WHERE username = ?', username).toArray()[0];
     if (!user || !(await verifyPassword(String(body.password || ''), user.password_hash)))
       return fail('Неверный юзернейм или пароль');
     const token = randomToken();
-    this.sql.exec('INSERT INTO tokens (token, user_id) VALUES (?, ?)', token, user.id);
-    return json({ token, user: { id: user.id, username: user.username } });
+    this.sql.exec(
+      'INSERT INTO tokens (token, user_id, device, ip) VALUES (?, ?, ?, ?)',
+      token, user.id, String(body.device || 'Устройство').slice(0, 80), this.clientIp(request)
+    );
+    return json({ token, user: {
+      id: user.id, username: user.username,
+      display_name: user.display_name, bio: user.bio, avatar_color: user.avatar_color,
+    } });
   }
 
   getChats(user) {
@@ -175,15 +253,51 @@ export class ChatRoom extends DurableObject {
       SELECT c.id, c.name, c.is_group,
         (SELECT text FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_message,
         (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_time,
-        (SELECT COUNT(*) FROM chat_members WHERE chat_id = c.id) AS members_count
+        (SELECT COUNT(*) FROM chat_members WHERE chat_id = c.id) AS members_count,
+        COALESCE((SELECT MAX(id) FROM messages WHERE chat_id = c.id), 0) AS last_id,
+        COALESCE((SELECT last_message_id FROM chat_reads WHERE chat_id = c.id AND user_id = ?), 0) AS read_id
       FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
       WHERE cm.user_id = ?
       ORDER BY COALESCE((SELECT MAX(id) FROM messages WHERE chat_id = c.id), 0) DESC
-    `, user.id).toArray());
+    `, user.id, user.id).toArray());
   }
 
-  getUsers(user) {
-    return json(this.sql.exec('SELECT id, username FROM users WHERE id != ? ORDER BY username', user.id).toArray());
+  searchUsers(user, query) {
+    const q = String(query || '').trim().replace(/^@/, '').toLowerCase().slice(0, 32);
+    if (q.length < 2) return json([]);
+    return json(this.sql.exec(`
+      SELECT id, username, display_name, bio, avatar_color FROM users
+      WHERE id != ? AND username LIKE ?
+      ORDER BY username LIMIT 20
+    `, user.id, `%${q}%`).toArray());
+  }
+
+  getSessions(user) {
+    const rows = this.sql.exec(`
+      SELECT token, device, ip, created_at, last_seen FROM tokens
+      WHERE user_id = ? ORDER BY last_seen DESC
+    `, user.id).toArray();
+    return json(rows.map((s) => ({
+      token: s.token,
+      device: s.device || 'Неизвестное устройство',
+      ip: s.ip || '',
+      created_at: s.created_at,
+      last_seen: s.last_seen,
+      current: s.token === user._token,
+    })));
+  }
+
+  revokeSession(user, body) {
+    const token = String(body.token || '');
+    const row = this.sql.exec('SELECT user_id FROM tokens WHERE token = ?', token).toArray()[0];
+    if (!row || row.user_id !== user.id) return fail('Сессия не найдена', 404);
+    this.sql.exec('DELETE FROM tokens WHERE token = ?', token);
+    return json({ ok: true });
+  }
+
+  revokeOthers(user) {
+    this.sql.exec('DELETE FROM tokens WHERE user_id = ? AND token != ?', user.id, user._token);
+    return json({ ok: true });
   }
 
   createChat(user, body) {
@@ -198,14 +312,25 @@ export class ChatRoom extends DurableObject {
     return json(chat, 201);
   }
 
+  msgSelect(chatId, where = '', params = []) {
+    return this.sql.exec(`
+      SELECT m.id, m.chat_id, m.text, m.created_at, m.reply_to, m.reactions, m.edited, m.deleted,
+        u.id AS user_id, u.username, u.display_name, u.avatar_color,
+        r.text AS reply_text, ru.username AS reply_username
+      FROM messages m
+      JOIN users u ON u.id = m.user_id
+      LEFT JOIN messages r ON r.id = m.reply_to
+      LEFT JOIN users ru ON ru.id = r.user_id
+      WHERE m.chat_id = ? ${where}
+      ORDER BY m.id DESC LIMIT 50
+    `, chatId, ...params).toArray().reverse();
+  }
+
   getMessages(user, chatId) {
     const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
     if (!member) return fail('Нет доступа к чату', 403);
-    return json(this.sql.exec(`
-      SELECT m.id, m.text, m.created_at, u.id AS user_id, u.username
-      FROM messages m JOIN users u ON u.id = m.user_id
-      WHERE m.chat_id = ? ORDER BY m.id DESC LIMIT 50
-    `, chatId).toArray().reverse());
+    const read = this.sql.exec('SELECT last_message_id FROM chat_reads WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
+    return json(this.msgSelect(chatId));
   }
 
   postMessage(user, chatId, body) {
@@ -213,13 +338,101 @@ export class ChatRoom extends DurableObject {
     if (!text) return fail('Пустое сообщение');
     const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
     if (!member) return fail('Вы не участник этого чата', 403);
+    let replyTo = Number(body.replyTo) || null;
+    if (replyTo) {
+      const orig = this.sql.exec('SELECT chat_id FROM messages WHERE id = ?', replyTo).toArray()[0];
+      if (!orig || orig.chat_id !== chatId) replyTo = null;
+    }
     const msg = this.sql.exec(`
-      INSERT INTO messages (chat_id, user_id, text) VALUES (?, ?, ?)
-      RETURNING id, chat_id, user_id, text, created_at
-    `, chatId, user.id, text).toArray()[0];
+      INSERT INTO messages (chat_id, user_id, text, reply_to) VALUES (?, ?, ?, ?)
+      RETURNING id, chat_id, user_id, text, reply_to, created_at
+    `, chatId, user.id, text, replyTo).toArray()[0];
     msg.username = user.username;
+    msg.display_name = user.display_name;
+    msg.avatar_color = user.avatar_color;
+    if (replyTo) {
+      const r = this.sql.exec(`
+        SELECT m.text AS reply_text, u.username AS reply_username
+        FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?
+      `, replyTo).toArray()[0];
+      if (r) Object.assign(msg, r);
+    }
     this.broadcast({ type: 'message:new', message: msg });
     return json(msg, 201);
+  }
+
+  updateProfile(user, body) {
+    const name = String(body.displayName ?? '').trim().slice(0, 40);
+    const bio = String(body.bio ?? '').trim().slice(0, 160);
+    const color = /^#[0-9a-fA-F]{6}$/.test(body.avatarColor || '') ? body.avatarColor : user.avatar_color;
+    this.sql.exec('UPDATE users SET display_name = ?, bio = ?, avatar_color = ? WHERE id = ?',
+      name || user.username, bio, color, user.id);
+    const updated = this.sql.exec('SELECT id, username, display_name, bio, avatar_color FROM users WHERE id = ?', user.id).toArray()[0];
+    this.broadcast({ type: 'profile:updated', user: updated });
+    return json(updated);
+  }
+
+  editMessage(user, id, body) {
+    const row = this.sql.exec('SELECT user_id, chat_id FROM messages WHERE id = ?', id).toArray()[0];
+    if (!row || row.user_id !== user.id) return fail('Нельзя редактировать это сообщение', 403);
+    const text = String(body.text || '').trim().slice(0, 2000);
+    if (!text) return fail('Пустое сообщение');
+    this.sql.exec('UPDATE messages SET text = ?, edited = 1 WHERE id = ?', text, id);
+    const updated = this.msgSelect(row.chat_id).find((m) => m.id === id);
+    this.broadcast({ type: 'message:edited', message: updated });
+    return json(updated);
+  }
+
+  deleteMessage(user, id) {
+    const row = this.sql.exec('SELECT user_id, chat_id FROM messages WHERE id = ?', id).toArray()[0];
+    if (!row || row.user_id !== user.id) return fail('Нельзя удалить это сообщение', 403);
+    this.sql.exec('UPDATE messages SET deleted = 1, text = "" WHERE id = ?', id);
+    this.broadcast({ type: 'message:deleted', id, chatId: row.chat_id });
+    return json({ ok: true });
+  }
+
+  reactMessage(user, id, body) {
+    const row = this.sql.exec('SELECT chat_id, reactions FROM messages WHERE id = ?', id).toArray()[0];
+    if (!row) return fail('Сообщение не найдено', 404);
+    const emoji = String(body.emoji || '').slice(0, 8);
+    if (!emoji) return fail('Выберите эмодзи');
+    let reactions = {};
+    try { reactions = JSON.parse(row.reactions || '{}'); } catch {}
+    reactions[emoji] = reactions[emoji] || [];
+    if (reactions[emoji].includes(user.id)) reactions[emoji] = reactions[emoji].filter((x) => x !== user.id);
+    else reactions[emoji].push(user.id);
+    if (!reactions[emoji].length) delete reactions[emoji];
+    this.sql.exec('UPDATE messages SET reactions = ? WHERE id = ?', JSON.stringify(reactions), id);
+    const updated = this.msgSelect(row.chat_id).find((m) => m.id === id);
+    this.broadcast({ type: 'reaction:new', message: updated });
+    return json(updated);
+  }
+
+  markRead(user, chatId, body) {
+    const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
+    if (!member) return fail('Нет доступа', 403);
+    const last = Number(body.lastMessageId) || 0;
+    this.sql.exec(`INSERT INTO chat_reads (chat_id, user_id, last_message_id) VALUES (?, ?, ?)
+      ON CONFLICT(chat_id, user_id) DO UPDATE SET last_message_id = MAX(last_message_id, excluded.last_message_id)`,
+      chatId, user.id, last);
+    this.broadcast({ type: 'read:update', chatId, userId: user.id, lastMessageId: last });
+    return json({ ok: true });
+  }
+
+  searchMessages(user, chatId, q) {
+    const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
+    if (!member) return fail('Нет доступа', 403);
+    const query = String(q || '').trim().slice(0, 64);
+    if (query.length < 2) return json([]);
+    return json(this.msgSelect(chatId, 'AND m.text LIKE ?', [`%${query}%`]));
+  }
+
+  leaveChat(user, chatId) {
+    const chat = this.sql.exec('SELECT name FROM chats WHERE id = ?', chatId).toArray()[0];
+    if (!chat) return fail('Чат не найден', 404);
+    if (chat.name === 'Общий чат') return fail('Нельзя покинуть общий чат');
+    this.sql.exec('DELETE FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id);
+    return json({ ok: true });
   }
 
   // ---------- WebSocket ----------
@@ -257,6 +470,7 @@ export class ChatRoom extends DurableObject {
     if (data.type === 'typing') {
       this.broadcast({
         type: 'typing',
+        chatId: data.chatId,
         userId: user.userId,
         username: user.username,
         isTyping: !!data.isTyping,
