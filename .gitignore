@@ -12,3 +12,5 @@ dist/
 !.env.example
 
 tunnel.log
+
+deployed-check.html
