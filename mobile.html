@@ -168,9 +168,7 @@ button{cursor:pointer;border:0;background:none}
 <div id="app"></div>
 <script>
 /* ============ STATE ============ */
-const IS_FILE = location.protocol === 'file:';
-const DEFAULT_URL = atob('aHR0cHM6Ly9jaGF0LW1hbmFnZXIucmVpZmx5MjMxLndvcmtlcnMuZGV2');
-let BASE = localStorage.getItem('chat_server') ?? DEFAULT_URL;
+const BASE = atob('aHR0cHM6Ly9jaGF0LW1hbmFnZXIucmVpZmx5MjMxLndvcmtlcnMuZGV2');
 let token = localStorage.getItem('chat_token') || '';
 let me = null, socket = null;
 let chats = [], active = null, messages = [], online = [], users = [];
@@ -278,7 +276,6 @@ function authScreen(err = ''){
     <button class="btn" type="submit" id="go">${authMode==='register'?'Создать аккаунт':'Войти'}</button>
     <div style="text-align:center;display:flex;flex-direction:column;gap:6px">
       ${authMode==='login' ? '<button type="button" class="link" id="forgotBtn">Забыли пароль?</button>' : ''}
-      ${IS_FILE ? '<button type="button" class="link" id="setupBtn">Изменить адрес сервера</button>' : ''}
     </div>
   </form></div>`;
   document.getElementById('tReg').onclick = () => { authMode='register'; authScreen(); };
@@ -286,8 +283,6 @@ function authScreen(err = ''){
   document.getElementById('eye').onclick = () => { showPass=!showPass; authScreen(); };
   const forgot = document.getElementById('forgotBtn');
   if (forgot) forgot.onclick = () => recoverySheet();
-  const setup = document.getElementById('setupBtn');
-  if (setup) setup.onclick = setupScreen;
   document.getElementById('authForm').onsubmit = async e => {
     e.preventDefault();
     const username = document.getElementById('u').value.trim();
@@ -311,22 +306,6 @@ function authScreen(err = ''){
       }
       authScreen(err.message);
     }
-  };
-}
-
-function setupScreen(){
-  app.innerHTML = `<div class="center"><form class="auth-box card" id="setupForm">
-    <div class="logo">${I.gear}</div><h1 style="font-size:19px">Адрес сервера</h1>
-    <div class="hint" style="margin-bottom:14px">Вставь ссылку на чат. Оставь пустым, чтобы использовать текущий адрес.</div>
-    <input class="inp" id="url" placeholder="https://...workers.dev" value="${esc(BASE||'')}">
-    <div class="err" id="e"></div>
-    <button class="btn" type="submit">Продолжить</button>
-  </form></div>`;
-  document.getElementById('setupForm').onsubmit = e => {
-    e.preventDefault();
-    BASE = document.getElementById('url').value.trim().replace(/\/$/, '');
-    localStorage.setItem('chat_server', BASE);
-    render();
   };
 }
 
@@ -443,7 +422,7 @@ function renderProfile(){
       <div class="settings-row"><span>⚫ AMOLED — чёрный экран</span><div class="switch ${theme==='amoled'?'on':''}" id="amoledSw"></div></div>
       <div class="settings-row" style="cursor:pointer" id="recoveryRow"><span>🔑 Код восстановления</span><span class="hint">›</span></div>
       <div class="settings-row" style="cursor:pointer" id="sessionsRow"><span>${I.devices} Сессии и устройства</span><span class="hint">›</span></div>
-      ${IS_FILE ? `<div class="settings-row" style="cursor:pointer" id="serverRow"><span>🌐 Адрес сервера</span><span class="hint">${esc(BASE||'текущий')}</span></div>` : ''}
+      <div class="settings-row" style="cursor:pointer;color:#e34d4d" id="deleteAccRow"><span>${I.trash} Удалить аккаунт</span><span>›</span></div>
       <div class="settings-row" style="border:0;cursor:pointer;color:#e34d4d" id="logoutRow"><span>${I.logout} Выйти из аккаунта</span><span>›</span></div>
     </div>
     <div class="hint" style="text-align:center;margin-top:16px">Chat Manager · один файл, без установки</div>
@@ -464,12 +443,34 @@ function renderProfile(){
   document.getElementById('savedRow').onclick = openSaved;
   document.getElementById('recoveryRow').onclick = recoveryCodeSheet;
   document.getElementById('sessionsRow').onclick = sessionsSheet;
-  const serverRow = document.getElementById('serverRow');
-  if (serverRow) serverRow.onclick = setupScreen;
+  document.getElementById('deleteAccRow').onclick = deleteAccountSheet;
   document.getElementById('logoutRow').onclick = () => {
     token=''; me=null;
     ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
     socket?.close(); authScreen();
+  };
+}
+
+/* ============ УДАЛЕНИЕ АККАУНТА ============ */
+function deleteAccountSheet(){
+  const o = document.createElement('div');
+  o.className = 'overlay';
+  o.innerHTML = `<div class="sheet">
+    <h3 style="color:#e34d4d">Удалить аккаунт?</h3>
+    <div class="hint" style="margin-bottom:14px">Аккаунт, все сообщения и сессии будут удалены безвозвратно.</div>
+    <div class="actions"><button class="sec" id="daCancel">Отмена</button><button class="btn" id="daConfirm" style="background:#e34d4d">Удалить навсегда</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.querySelector('#daCancel').onclick = () => o.remove();
+  o.querySelector('#daConfirm').onclick = async () => {
+    try {
+      await api('/account', {method:'DELETE'});
+      o.remove();
+      token = ''; me = null; socket?.close();
+      ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
+      authScreen('Аккаунт удалён.');
+    } catch(e) { notify(e.message); }
   };
 }
 
@@ -1084,7 +1085,6 @@ function offlineScreen(msg){
 }
 
 function render(){
-  if (BASE === null) return setupScreen();
   if (!token) return authScreen();
   if (!me) {
     splash('Восстанавливаем сессию...');

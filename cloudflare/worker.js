@@ -58,6 +58,7 @@ export class ChatRoom extends DurableObject {
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
+        username_key TEXT,
         password_hash TEXT,
         display_name TEXT,
         bio TEXT,
@@ -114,13 +115,16 @@ export class ChatRoom extends DurableObject {
     // Миграции для старых баз
     for (const [table, col, def] of [
       ['users', 'display_name', 'TEXT'], ['users', 'bio', 'TEXT'], ['users', 'avatar_color', 'TEXT'],
-      ['users', 'recovery_code', 'TEXT'],
+      ['users', 'recovery_code', 'TEXT'], ['users', 'username_key', 'TEXT'],
       ['messages', 'reply_to', 'INTEGER'], ['messages', 'reactions', 'TEXT'],
       ['messages', 'edited', 'INTEGER DEFAULT 0'], ['messages', 'deleted', 'INTEGER DEFAULT 0'],
     ]) {
       const cols = this.sql.exec(`PRAGMA table_info(${table})`).toArray();
       if (!cols.some((c) => c.name === col)) this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
     }
+    // Ключ в нижнем регистре для входа; отображаемое имя сохраняет оригинальный регистр
+    this.sql.exec('UPDATE users SET username_key = lower(username) WHERE username_key IS NULL');
+    this.sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_key ON users(username_key)');
     const g = this.sql.exec("SELECT id FROM chats WHERE name = 'Общий чат'").toArray();
     if (!g.length) this.sql.exec("INSERT INTO chats (name, is_group) VALUES ('Общий чат', 1)");
   }
@@ -164,10 +168,10 @@ export class ChatRoom extends DurableObject {
     if (path === '/api/register' && method === 'POST') return this.register(body, request);
     if (path === '/api/login' && method === 'POST') return this.login(body, request);
     if (path === '/api/recover' && method === 'POST') return this.recover(body);
-
     const user = this.userFromRequest(request);
     if (!user) return fail('Не авторизован', 401);
 
+    if (path === '/api/account' && method === 'DELETE') return this.deleteUserAccount(user.username);
     if (path === '/api/recovery-code' && method === 'GET') return this.getRecoveryCode(user);
     if (path === '/api/me' && method === 'GET') return json(user);
     if (path === '/api/me' && method === 'PATCH') return this.updateProfile(user, body);
@@ -214,13 +218,14 @@ export class ChatRoom extends DurableObject {
   }
 
   async register(body, request) {
-    const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
+    const original = String(body.username || '').trim().replace(/^@/, '').slice(0, 32);
+    const username = original.toLowerCase();
     if (!/^[a-z0-9_]{5,32}$/.test(username))
       return fail('Юзернейм: 5–32 символа, только латиница, цифры и _');
     const password = String(body.password || '');
     if (password.length < 6) return fail('Пароль должен быть не короче 6 символов');
 
-    const existing = this.sql.exec('SELECT * FROM users WHERE username = ?', username).toArray()[0];
+    const existing = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];
     if (existing && existing.password_hash) return fail('Этот юзернейм уже занят');
 
     const hash = await hashPassword(password);
@@ -232,8 +237,8 @@ export class ChatRoom extends DurableObject {
       recovery = user.recovery_code;
     } else {
       user = this.sql.exec(
-        'INSERT INTO users (username, password_hash, display_name, bio, avatar_color, recovery_code) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color, recovery_code',
-        username, hash, username, '', '#4fa8f5', recovery
+        'INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color, recovery_code',
+        original, username, hash, original, '', '#4fa8f5', recovery
       ).toArray()[0];
     }
     this.sql.exec('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', this.generalId, user.id);
@@ -247,7 +252,7 @@ export class ChatRoom extends DurableObject {
 
   async login(body, request) {
     const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
-    const user = this.sql.exec('SELECT * FROM users WHERE username = ?', username).toArray()[0];
+    const user = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];
     if (!user || !(await verifyPassword(String(body.password || ''), user.password_hash)))
       return fail('Неверный юзернейм или пароль');
     const token = randomToken();
@@ -261,6 +266,24 @@ export class ChatRoom extends DurableObject {
     } });
   }
 
+  deleteUserAccount(username) {
+    const name = String(username || '').trim().replace(/^@/, '').toLowerCase();
+    const user = this.sql.exec('SELECT id FROM users WHERE username_key = ?', name).toArray()[0];
+    if (!user) return fail('Пользователь не найден', 404);
+    const chatIds = this.sql.exec('SELECT chat_id FROM chat_members WHERE user_id = ?', user.id)
+      .toArray().map((r) => r.chat_id);
+    this.sql.exec('DELETE FROM messages WHERE user_id = ?', user.id);
+    this.sql.exec('DELETE FROM chat_members WHERE user_id = ?', user.id);
+    this.sql.exec('DELETE FROM chat_reads WHERE user_id = ?', user.id);
+    this.sql.exec('DELETE FROM tokens WHERE user_id = ?', user.id);
+    for (const cid of chatIds) {
+      const left = this.sql.exec('SELECT COUNT(*) AS c FROM chat_members WHERE chat_id = ?', cid).toArray()[0].c;
+      if (!left) this.sql.exec('DELETE FROM chats WHERE id = ?', cid);
+    }
+    this.sql.exec('DELETE FROM users WHERE id = ?', user.id);
+    return json({ ok: true });
+  }
+
   getRecoveryCode(user) {
     const row = this.sql.exec('SELECT recovery_code FROM users WHERE id = ?', user.id).toArray()[0];
     if (row?.recovery_code) return json({ code: row.recovery_code });
@@ -271,7 +294,7 @@ export class ChatRoom extends DurableObject {
 
   async recover(body) {
     const username = String(body.username || '').trim().replace(/^@/, '').toLowerCase();
-    const user = this.sql.exec('SELECT * FROM users WHERE username = ?', username).toArray()[0];
+    const user = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];
     const code = normCode(body.recoveryCode);
     if (!user || !user.recovery_code || normCode(user.recovery_code) !== code)
       return fail('Неверный юзернейм или код восстановления');
@@ -304,7 +327,7 @@ export class ChatRoom extends DurableObject {
     if (q.length < 2) return json([]);
     return json(this.sql.exec(`
       SELECT id, username, display_name, bio, avatar_color FROM users
-      WHERE id != ? AND username LIKE ?
+      WHERE id != ? AND username_key LIKE ?
       ORDER BY username LIMIT 20
     `, user.id, `%${q}%`).toArray());
   }
