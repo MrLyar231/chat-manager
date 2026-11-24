@@ -42,13 +42,13 @@
     <path d="M300 430l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" opacity="0.6"/>
   </g>
 
-  <!-- светящийся самолёт-бабл -->
+  <!-- светящийся самолёт: три чистые грани без наложений -->
   <g filter="url(#glow)">
-    <path d="M108 258 L396 132 L306 380 L246 298 L176 356 L198 266 Z" fill="url(#plane)"/>
+    <path d="M396 132 L120 262 L250 292 Z" fill="url(#plane)"/>
+    <path d="M396 132 L250 292 L300 370 Z" fill="url(#fold)"/>
+    <path d="M120 262 L250 292 L176 350 Z" fill="#cfe9ff"/>
+    <path d="M250 292 L176 350 L300 370 Z" fill="#9fd0ff"/>
   </g>
-  <!-- внутренняя грань -->
-  <path d="M396 132 L246 298 L198 266 Z" fill="url(#fold)"/>
-  <path d="M108 258 L246 298 L176 356 Z" fill="#bfe6ff" opacity="0.85"/>
   <!-- хвостик-сообщение -->
   <circle cx="356" cy="176" r="9" fill="#6f61e8"/>
   <circle cx="332" cy="200" r="6" fill="#6f61e8" opacity="0.7"/>
