@@ -42,12 +42,21 @@
     <path d="M300 430l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" opacity="0.6"/>
   </g>
 
-  <!-- светящийся самолёт: три чистые грани без наложений -->
-  <g filter="url(#glow)">
-    <path d="M396 132 L120 262 L250 292 Z" fill="url(#plane)"/>
-    <path d="M396 132 L250 292 L300 370 Z" fill="url(#fold)"/>
-    <path d="M120 262 L250 292 L176 350 Z" fill="#cfe9ff"/>
-    <path d="M250 292 L176 350 L300 370 Z" fill="#9fd0ff"/>
+  <!-- симметричный бумажный самолёт, повёрнут на 90 градусов -->
+  <g transform="rotate(90 256 256)">
+    <g filter="url(#glow)">
+      <path d="M256 120 L410 322 L300 368 L256 282 L212 368 L102 322 Z" fill="url(#plane)"/>
+      <!-- левое крыло -->
+      <path d="M256 120 L102 322 L256 282 Z" fill="url(#plane)"/>
+      <!-- правое крыло -->
+      <path d="M256 120 L410 322 L256 282 Z" fill="url(#fold)"/>
+      <!-- левый закрылок -->
+      <path d="M102 322 L212 368 L256 282 Z" fill="#cfe9ff"/>
+      <!-- правый закрылок -->
+      <path d="M256 282 L300 368 L410 322 Z" fill="#9fd0ff"/>
+    </g>
+    <!-- центральная складка -->
+    <path d="M256 120 L256 282" stroke="#fff" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
   </g>
   <!-- хвостик-сообщение -->
   <circle cx="356" cy="176" r="9" fill="#6f61e8"/>
