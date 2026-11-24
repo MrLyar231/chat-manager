@@ -14,3 +14,11 @@ dist/
 tunnel.log
 
 deployed-check.html
+
+android-app/node_modules/
+android-app/android/.gradle/
+android-app/android/build/
+android-app/android/app/build/
+android-app/android/local.properties
+android-app/www/
+*.apk

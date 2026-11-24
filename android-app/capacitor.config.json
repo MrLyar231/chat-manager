@@ -1,0 +1,8 @@
+{
+  "appId": "com.reifly.chatmanager",
+  "appName": "Chat Manager",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  }
+}
