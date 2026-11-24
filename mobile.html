@@ -213,7 +213,10 @@ try {
 } catch(e) {}
 
 /* ============ АВТОРИЗАЦИЯ ============ */
-let authMode = 'register', showPass = false;
+let authMode = localStorage.getItem('chat_last_user') ? 'login' : 'register';
+let showPass = false;
+let pendingUser = localStorage.getItem('chat_last_user') || '';
+let pendingPass = '';
 function authScreen(err = ''){
   app.innerHTML = `<div class="center"><form class="auth-box card" id="authForm">
     <div class="logo">💬</div><h1>Chat Manager</h1>
@@ -221,10 +224,11 @@ function authScreen(err = ''){
       <button type="button" id="tReg" class="${authMode==='register'?'on':''}">Регистрация</button>
       <button type="button" id="tLog" class="${authMode==='login'?'on':''}">Вход</button>
     </div>
-    <div class="field"><span>@</span><input id="u" placeholder="юзернейм" autocomplete="username" maxlength="32" value="${esc(localStorage.getItem('chat_last_user')||'')}"></div>
-    <div class="field"><input id="p" type="${showPass?'text':'password'}" placeholder="Пароль (от 6 символов)" autocomplete="${authMode==='register'?'new-password':'current-password'}"><button type="button" class="eye" id="eye">${showPass?'🙈':'👁'}</button></div>
+    <div class="field"><span>@</span><input id="u" placeholder="юзернейм" autocomplete="username" maxlength="32" value="${esc(pendingUser)}"></div>
+    <div class="field"><input id="p" type="${showPass?'text':'password'}" placeholder="Пароль (от 6 символов)" autocomplete="current-password" value="${esc(pendingPass)}"><button type="button" class="eye" id="eye">${showPass?'🙈':'👁'}</button></div>
     ${authMode==='register' ? '<div class="field"><input id="p2" type="password" placeholder="Повторите пароль" autocomplete="new-password"></div>' : ''}
-    <div class="hint" style="margin:2px 0 10px">5–32 символа: латиница, цифры, _</div>
+    <div class="hint" style="margin:2px 0 6px">5–32 символа: латиница, цифры, _</div>
+    ${authMode==='register' ? '<div class="hint" style="margin:0 0 10px;color:var(--b)">Уже есть аккаунт? Нажмите «Вход» сверху.</div>' : ''}
     <div class="err">${esc(err)}</div>
     <button class="btn" type="submit" id="go">${authMode==='register'?'Создать аккаунт':'Войти'}</button>
     <div style="text-align:center"><button type="button" class="link" id="setupBtn">Изменить адрес сервера</button></div>
@@ -237,15 +241,24 @@ function authScreen(err = ''){
     e.preventDefault();
     const username = document.getElementById('u').value.trim();
     const password = document.getElementById('p').value;
+    pendingUser = username; pendingPass = password;
     if (authMode==='register' && password !== document.getElementById('p2').value)
       return authScreen('Пароли не совпадают');
     try {
       const data = await api('/' + authMode, {method:'POST', body:JSON.stringify({username,password,device:deviceName()})});
       token = data.token; me = data.user;
+      pendingPass = '';
       localStorage.setItem('chat_token', token);
       localStorage.setItem('chat_last_user', data.user.username);
       start();
-    } catch(err) { authScreen(err.message); }
+    } catch(err) {
+      // Аккаунт уже есть — это вход с другого устройства, переключаем на «Вход»
+      if (authMode === 'register' && /занят/i.test(err.message)) {
+        authMode = 'login';
+        return authScreen('Этот юзернейм уже существует. Введите пароль и нажмите «Войти» — данные сохранены.');
+      }
+      authScreen(err.message);
+    }
   };
 }
 
