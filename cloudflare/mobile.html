@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Chat">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Chat Manager</title>
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM0ZmFjZmUiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI1NSUiIHN0b3AtY29sb3I9IiMzMzkwZWMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjN2I2Y2YwIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJidWIiIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiNlYWY1ZmYiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8ZmlsdGVyIGlkPSJzaGFkb3ciIHg9Ii0zMCUiIHk9Ii0zMCUiIHdpZHRoPSIxNjAlIiBoZWlnaHQ9IjE2MCUiPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTQiIHN0ZERldmlhdGlvbj0iMTgiIGZsb29kLWNvbG9yPSIjMWI0ZjhjIiBmbG9vZC1vcGFjaXR5PSIwLjM1Ii8+CiAgICA8L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3QgeD0iMTYiIHk9IjE2IiB3aWR0aD0iNDgwIiBoZWlnaHQ9IjQ4MCIgcng9IjEwOCIgZmlsbD0idXJsKCNiZykiLz4KICA8cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSI0ODAiIGhlaWdodD0iNDgwIiByeD0iMTA4IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS1vcGFjaXR5PSIwLjI1IiBzdHJva2Utd2lkdGg9IjMiLz4KICA8ZyBmaWx0ZXI9InVybCgjc2hhZG93KSI+CiAgICA8cGF0aCBkPSJNMTIwIDE3NGMwLTM0IDI4LTYyIDYyLTYyaDE0OGMzNCAwIDYyIDI4IDYyIDYydjEwNGMwIDM0LTI4IDYyLTYyIDYySDIzMmwtNjYgNDh2LTQ4Yy0yNy05LTQ2LTM0LTQ2LTYyVjE3NHoiIGZpbGw9InVybCgjYnViKSIvPgogIDwvZz4KICA8cGF0aCBkPSJNMTg4IDIyMmgxMzYiIHN0cm9rZT0iIzMzOTBlYyIgc3Ryb2tlLXdpZHRoPSIxOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjkiLz4KICA8cGF0aCBkPSJNMTg4IDI2OGg5MiIgc3Ryb2tlPSIjMzM5MGVjIiBzdHJva2Utd2lkdGg9IjE4IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiLz4KICA8Y2lyY2xlIGN4PSIzNjAiIGN5PSIyOTAiIHI9IjM0IiBmaWxsPSIjMzM5MGVjIi8+CiAgPHBhdGggZD0iTTM0NiAzMDVsNy0yNCAyNC04LTExIDIxLTIwIDExeiIgZmlsbD0iI2ZmZiIvPgo8L3N2Zz4K" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -247,6 +248,64 @@ html[data-theme="dark"] .center::before,html[data-theme="dark"] .center::after,h
 html[data-theme="amoled"] .msgs{background-image:none!important}
 html[data-theme="amoled"] .bub.mine{background:#001522!important}
 html[data-theme="amoled"] .card,html[data-theme="amoled"] .bub,html[data-theme="amoled"] .topbar,html[data-theme="amoled"] .tabbar,html[data-theme="amoled"] .chat-head{box-shadow:none!important}
+
+/* на широком экране — аккуратная колонка, как окно приложения */
+@media (min-width:760px){
+  body{background:#0b0e12}
+  html[data-theme="light"] body{background:#dce7f5}
+  #app{max-width:480px;margin:0 auto;background:var(--bg);box-shadow:0 0 60px rgba(0,0,0,.45)}
+  html[data-theme="light"] #app{box-shadow:0 0 60px rgba(31,76,140,.18)}
+}
+.avatar svg{width:20px;height:20px}
+
+/* ===== LIQUID GLASS ===== */
+:root{
+  --glass:rgba(255,255,255,.62);
+  --glass-strong:rgba(255,255,255,.84);
+  --glass-border:rgba(255,255,255,.7);
+  --glass-shadow:0 10px 34px rgba(31,76,140,.12),inset 0 1px 0 rgba(255,255,255,.75);
+  --glass-blur:blur(20px) saturate(170%);
+}
+html[data-theme="dark"]{
+  --glass:rgba(30,36,43,.6);
+  --glass-strong:rgba(30,36,43,.86);
+  --glass-border:rgba(255,255,255,.1);
+  --glass-shadow:0 10px 34px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.06);
+  --glass-blur:blur(20px) saturate(150%);
+}
+html[data-theme="amoled"]{
+  --glass:rgba(0,0,0,.94);
+  --glass-strong:#000;
+  --glass-border:rgba(255,255,255,.07);
+  --glass-shadow:none;
+  --glass-blur:none;
+}
+html[data-theme="light"] body{background:linear-gradient(135deg,#eaf3ff 0%,#f5f0ff 50%,#e9f6ff 100%)}
+html[data-theme="amoled"] body{background:#000!important}
+
+.topbar,.chat-head,.tabbar,.composer,.card,.auth-box,.sheet,.searchbar input,.inp,.field,.composer textarea,.bub,.replybar,.emoji-panel,.typing-bubble{
+  background:var(--glass);
+  -webkit-backdrop-filter:var(--glass-blur);
+  backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--glass-shadow);
+}
+.card,.auth-box,.sheet{background:var(--glass-strong)}
+.tabbar{border-top:1px solid var(--glass-border)}
+.topbar,.chat-head,.composer{border-color:var(--glass-border)}
+.field input{background:transparent}
+.inp,.searchbar input,.composer textarea{box-shadow:inset 0 1px 2px rgba(0,0,0,.04)}
+.inp:focus,.field:focus-within,.searchbar input:focus,.composer textarea:focus{
+  border-color:var(--b);
+  box-shadow:0 0 0 3px rgba(51,144,236,.14),inset 0 1px 2px rgba(0,0,0,.03);
+}
+.bub.mine{background:linear-gradient(135deg,rgba(79,172,254,.92),rgba(51,144,236,.94));border-color:rgba(255,255,255,.28);box-shadow:0 8px 22px rgba(51,144,236,.28),inset 0 1px 0 rgba(255,255,255,.3)}
+.tabbar button.on .ic{background:rgba(51,144,236,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+.row{background:transparent;box-shadow:none;border:1px solid transparent}
+.row.active{background:rgba(51,144,236,.1);border-color:rgba(51,144,236,.2)}
+.overlay{background:rgba(10,20,35,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+html[data-theme="amoled"] .overlay{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(0,0,0,.75)}
+html[data-theme="amoled"] .topbar,html[data-theme="amoled"] .tabbar,html[data-theme="amoled"] .chat-head,html[data-theme="amoled"] .composer,html[data-theme="amoled"] .card,html[data-theme="amoled"] .sheet,html[data-theme="amoled"] .bub{box-shadow:none!important}
 </style>
 </head>
 <body>
@@ -334,7 +393,12 @@ async function api(path, opts = {}){
 
 /* PWA manifest из одного файла */
 try {
-  const manifest = {name:'Chat Manager', short_name:'Chat', start_url:'.', display:'standalone', background_color:'#f2f3f5', theme_color:'#3390ec', icons:[]};
+  const iconHref = document.querySelector('link[rel="icon"]')?.href || '';
+  const manifest = {
+    name:'Chat Manager', short_name:'Chat', start_url:'.', display:'standalone',
+    background_color:'#000', theme_color:'#3390ec',
+    icons: iconHref ? [{src:iconHref, sizes:'512x512', type:'image/svg+xml', purpose:'any maskable'}] : [],
+  };
   const link = document.createElement('link');
   link.rel = 'manifest';
   link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
@@ -439,7 +503,7 @@ function paintChats(){
   const list = chats.filter(c => !q || c.name.toLowerCase().includes(q) || (c.last_message||'').toLowerCase().includes(q));
   el.innerHTML = list.length ? list.map(c => `
     <button class="row" data-id="${c.id}">
-      <div class="avatar">${c.is_group?'👥':initial(c.name)}${!c.is_group && c.user_id && online.includes(c.user_id) ? '<span class="dot"></span>' : ''}</div>
+      <div class="avatar">${c.is_group?I.people:initial(c.name)}${!c.is_group && c.user_id && online.includes(c.user_id) ? '<span class="dot"></span>' : ''}</div>
       <div class="info">
         <div class="n">${esc(c.name)}</div>
         <div class="p">${c.last_message ? (c.last_message.startsWith('@')?'': '') + esc(c.last_message) : 'Сообщений пока нет'}</div>
@@ -963,7 +1027,7 @@ async function groupProfileSheet(chat){
   o.className = 'overlay';
   o.innerHTML = `<div class="sheet">
     <div style="text-align:center;padding:4px 0 12px">
-      <div class="avatar" style="width:64px;height:64px;margin:0 auto 10px;font-size:26px">${chat.is_group?'👥':initial(chat.name)}</div>
+      <div class="avatar" style="width:64px;height:64px;margin:0 auto 10px;font-size:26px">${chat.is_group?I.people:initial(chat.name)}</div>
       <div style="font-weight:700;font-size:18px">${esc(chat.name)}</div>
       <div class="hint" id="gpSub" style="margin-top:3px">загрузка...</div>
     </div>
@@ -1076,7 +1140,7 @@ async function openChat(chat){
     <div class="chat-head">
       <button class="iconbtn" id="back">${I.back}</button>
       <div id="chatInfo" style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;cursor:pointer">
-        <div class="avatar sm">${chat.is_group?'👥':initial(chat.name)}</div>
+        <div class="avatar sm">${chat.is_group?I.people:initial(chat.name)}</div>
         <div style="flex:1;min-width:0"><div class="nm">${esc(chat.name)}</div>
           <div class="st" id="status">${chat.name==='Избранное' ? '' : `${chat.members_count||1} участник(ов)`}</div>
         </div>
