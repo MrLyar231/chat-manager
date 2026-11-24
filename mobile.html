@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="Chat">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Chat Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -50,6 +53,7 @@ button{cursor:pointer;border:0;background:none}
 .inp{width:100%;padding:12px 14px;border:1px solid var(--bd);border-radius:11px;background:var(--card);outline:none}
 .inp:focus{border-color:var(--b)}
 .hint{font-size:11.5px;color:var(--m);line-height:1.4}
+.code-warning{color:#e34d4d;font-weight:700;font-size:12px;line-height:1.45;text-align:center;margin:10px 0;padding:9px 10px;background:rgba(227,77,77,.09);border-radius:10px}
 .err{color:#e34d4d;font-size:12.5px;min-height:17px}
 .avatar{
   width:44px;height:44px;border-radius:50%;flex-shrink:0;
@@ -162,6 +166,87 @@ button{cursor:pointer;border:0;background:none}
 .switch::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .switch.on{background:var(--b)}
 .switch.on::after{left:21px}
+
+/* ===== ДИЗАЙН-ПОЛИРОВКА ===== */
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.btn{background:linear-gradient(135deg,var(--b),var(--b2));box-shadow:0 6px 18px rgba(51,144,236,.28);transition:transform .15s,box-shadow .2s,filter .2s}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:scale(.97);box-shadow:0 3px 9px rgba(51,144,236,.2)}
+.card{box-shadow:0 8px 28px rgba(31,45,61,.07),0 1px 2px rgba(0,0,0,.03)}
+
+/* фон экрана входа */
+html[data-theme="light"] .center{
+  background:radial-gradient(1100px 620px at 5% -15%,#cfe8ff,transparent 62%),
+             radial-gradient(900px 520px at 110% 115%,#e2d4ff,transparent 58%),#eef4ff;
+  position:relative;overflow:hidden;
+}
+.center::before,.center::after{content:"";position:absolute;border-radius:50%;pointer-events:none;filter:blur(6px)}
+.center::before{width:300px;height:300px;top:-110px;left:-70px;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.95),rgba(120,190,255,.3));animation:floatA 9s ease-in-out infinite}
+.center::after{width:260px;height:260px;bottom:-110px;right:-70px;background:radial-gradient(circle at 60% 40%,rgba(255,255,255,.8),rgba(167,139,250,.28));animation:floatB 11s ease-in-out infinite}
+.center>*{position:relative;z-index:1}
+@keyframes floatA{50%{transform:translate(35px,28px) scale(1.12)}}
+@keyframes floatB{50%{transform:translate(-30px,-24px) scale(1.08)}}
+.auth-box{border:1px solid rgba(255,255,255,.6);backdrop-filter:blur(16px);box-shadow:0 22px 60px rgba(31,76,140,.17)}
+.logo{color:var(--b);filter:drop-shadow(0 6px 12px rgba(51,144,236,.28))}
+
+/* аватары и шапки */
+.avatar{box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 12px rgba(51,144,236,.22)}
+.dot{box-shadow:0 0 0 2px var(--card),0 0 8px rgba(58,202,109,.7);animation:pulse 2.4s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 2px var(--card),0 0 14px rgba(58,202,109,.95)}}
+.topbar,.chat-head{backdrop-filter:blur(14px)}
+
+/* нижняя навигация */
+.tabbar button{transition:color .2s}
+.tabbar button.on .ic{background:rgba(51,144,236,.14);border-radius:12px;padding:3px 12px}
+
+/* список чатов */
+.row{border-radius:14px;margin:2px 8px;width:calc(100% - 16px);transition:background .15s,transform .1s}
+.row:active{transform:scale(.992)}
+.row.active{background:rgba(51,144,236,.1)}
+.unread{background:linear-gradient(135deg,#ff5f6d,var(--b));box-shadow:0 2px 7px rgba(255,95,109,.3)}
+.searchbar input,.composer textarea{box-shadow:inset 0 1px 3px rgba(0,0,0,.04)}
+.searchbar input:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(51,144,236,.12)}
+.inp:focus,.field:focus-within{box-shadow:0 0 0 3px rgba(51,144,236,.12)}
+
+/* пузыри сообщений */
+.bub{border:1px solid rgba(0,0,0,.03);border-radius:16px 16px 16px 5px;box-shadow:0 2px 9px rgba(16,36,56,.06)}
+.bub.mine{border-radius:16px 16px 5px 16px;background:linear-gradient(135deg,var(--b),#4facfe);color:#fff;border-color:transparent;box-shadow:0 3px 12px rgba(51,144,236,.22)}
+.bub.mine .tm{color:rgba(255,255,255,.82)}
+.bub.mine .checks{color:rgba(255,255,255,.95)}
+.rx{background:rgba(120,130,145,.16);border:1px solid transparent;transition:transform .15s,background .15s}
+.rx:active{transform:scale(1.15)}
+.rx.on{background:var(--b);color:#fff;border-color:transparent}
+.date span{background:rgba(120,130,145,.18);backdrop-filter:blur(6px)}
+
+/* поле ввода и кнопка отправки */
+.composer textarea:focus{border-color:var(--b);box-shadow:0 0 0 3px rgba(51,144,236,.12)}
+.send{background:linear-gradient(135deg,var(--b),var(--b2));box-shadow:0 4px 13px rgba(51,144,236,.38);transition:transform .15s,box-shadow .2s}
+.send:active{transform:scale(.9)}
+.fab{box-shadow:0 8px 22px rgba(51,144,236,.45)}
+
+/* модальные окна */
+.overlay{animation:fadeIn .18s ease}
+.sheet{animation:slideUp .28s cubic-bezier(.2,.9,.3,1)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{transform:translateY(28px);opacity:.4}to{transform:none;opacity:1}}
+.toast{animation:toastIn .25s cubic-bezier(.2,.9,.3,1)}
+@keyframes toastIn{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
+
+/* индикатор набора текста */
+.typing-dots{display:inline-flex;gap:3px;vertical-align:middle;margin-right:4px}
+.typing-dots i{width:5px;height:5px;border-radius:50%;background:var(--b);animation:dots 1.2s infinite}
+.typing-dots i:nth-child(2){animation-delay:.15s}
+.typing-dots i:nth-child(3){animation-delay:.3s}
+@keyframes dots{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* тёмная тема и AMOLED остаются полностью чёрными */
+html[data-theme="dark"] .center,html[data-theme="amoled"] .center{background:#000!important}
+html[data-theme="dark"] .center::before,html[data-theme="dark"] .center::after,html[data-theme="amoled"] .center::before,html[data-theme="amoled"] .center::after{display:none}
+html[data-theme="amoled"] .msgs{background-image:none!important}
+html[data-theme="amoled"] .bub.mine{background:#001522!important}
+html[data-theme="amoled"] .card,html[data-theme="amoled"] .bub,html[data-theme="amoled"] .topbar,html[data-theme="amoled"] .tabbar,html[data-theme="amoled"] .chat-head{box-shadow:none!important}
 </style>
 </head>
 <body>
@@ -230,6 +315,7 @@ function notify(text){
   if (old) old.remove();
   const el = document.createElement('div');
   el.id = 'toast';
+  el.className = 'toast';
   el.textContent = text;
   el.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:9px 15px;border-radius:20px;font-size:13px;z-index:99;max-width:80%;text-align:center';
   document.body.appendChild(el);
@@ -422,7 +508,6 @@ function renderProfile(){
       <div class="settings-row"><span>⚫ AMOLED — чёрный экран</span><div class="switch ${theme==='amoled'?'on':''}" id="amoledSw"></div></div>
       <div class="settings-row" style="cursor:pointer" id="recoveryRow"><span>🔑 Код восстановления</span><span class="hint">›</span></div>
       <div class="settings-row" style="cursor:pointer" id="sessionsRow"><span>${I.devices} Сессии и устройства</span><span class="hint">›</span></div>
-      <div class="settings-row" style="cursor:pointer;color:#e34d4d" id="deleteAccRow"><span>${I.trash} Удалить аккаунт</span><span>›</span></div>
       <div class="settings-row" style="border:0;cursor:pointer;color:#e34d4d" id="logoutRow"><span>${I.logout} Выйти из аккаунта</span><span>›</span></div>
     </div>
     <div class="hint" style="text-align:center;margin-top:16px">Chat Manager · один файл, без установки</div>
@@ -443,8 +528,20 @@ function renderProfile(){
   document.getElementById('savedRow').onclick = openSaved;
   document.getElementById('recoveryRow').onclick = recoveryCodeSheet;
   document.getElementById('sessionsRow').onclick = sessionsSheet;
-  document.getElementById('deleteAccRow').onclick = deleteAccountSheet;
-  document.getElementById('logoutRow').onclick = () => {
+  // Удаление аккаунта спрятано: долгое нажатие (3 сек) на «Выйти» — случайно не нажать
+  const logoutRow = document.getElementById('logoutRow');
+  let holdTimer = null, holdFired = false;
+  const startHold = () => {
+    holdFired = false;
+    holdTimer = setTimeout(() => { holdFired = true; deleteAccountSheet(); }, 3000);
+  };
+  const cancelHold = () => { clearTimeout(holdTimer); };
+  logoutRow.addEventListener('touchstart', startHold, {passive:true});
+  ['touchend','touchmove','touchcancel'].forEach(ev => logoutRow.addEventListener(ev, cancelHold, {passive:true}));
+  logoutRow.addEventListener('mousedown', startHold);
+  ['mouseup','mouseleave'].forEach(ev => logoutRow.addEventListener(ev, cancelHold));
+  logoutRow.onclick = () => {
+    if (holdFired) { holdFired = false; return; }
     token=''; me=null;
     ['chat_token','chat_active','chat_tab'].forEach(k => localStorage.removeItem(k));
     socket?.close(); authScreen();
@@ -457,13 +554,18 @@ function deleteAccountSheet(){
   o.className = 'overlay';
   o.innerHTML = `<div class="sheet">
     <h3 style="color:#e34d4d">Удалить аккаунт?</h3>
-    <div class="hint" style="margin-bottom:14px">Аккаунт, все сообщения и сессии будут удалены безвозвратно.</div>
-    <div class="actions"><button class="sec" id="daCancel">Отмена</button><button class="btn" id="daConfirm" style="background:#e34d4d">Удалить навсегда</button></div>
+    <div class="hint" style="margin-bottom:10px">Аккаунт, все сообщения и сессии будут удалены безвозвратно.</div>
+    <div class="hint" style="margin-bottom:8px">Для подтверждения введите <b>УДАЛИТЬ</b>:</div>
+    <input class="inp" id="daInput" placeholder="УДАЛИТЬ" maxlength="10" autocomplete="off" style="margin-bottom:10px">
+    <div class="actions"><button class="sec" id="daCancel">Отмена</button><button class="btn" id="daConfirm" style="background:#e34d4d" disabled>Удалить навсегда</button></div>
   </div>`;
   document.body.appendChild(o);
   o.onclick = e => { if (e.target === o) o.remove(); };
   o.querySelector('#daCancel').onclick = () => o.remove();
-  o.querySelector('#daConfirm').onclick = async () => {
+  const daInput = o.querySelector('#daInput');
+  const daConfirm = o.querySelector('#daConfirm');
+  daInput.oninput = () => { daConfirm.disabled = daInput.value.trim().toUpperCase() !== 'УДАЛИТЬ'; };
+  daConfirm.onclick = async () => {
     try {
       await api('/account', {method:'DELETE'});
       o.remove();
@@ -521,6 +623,7 @@ function showRecoveryOnce(code){
     <h3>Код восстановления</h3>
     <div class="hint">Сохраните этот код — с его помощью можно вернуть доступ, если забудете пароль. Он больше не появится.</div>
     ${recoveryCodeBlock(code)}
+    <div class="code-warning">⚠️ ОБЯЗАТЕЛЬНО сохраните этот код и НИКОМУ его не передавайте — ни вторым, ни третьим лицам. Любой, у кого он окажется, сможет войти в ваш аккаунт и сменить пароль.</div>
     <button class="btn sec" id="copyOnce">Скопировать код</button>
     <div class="actions"><button class="btn" id="savedOnce">Я сохранил</button></div>
   </div>`;
@@ -536,6 +639,7 @@ async function recoveryCodeSheet(){
     <h3>Код восстановления</h3>
     <div class="hint">Храните его в безопасном месте. Если измените пароль, код станет другим.</div>
     <div id="rcode">загрузка...</div>
+    <div class="code-warning">⚠️ ОБЯЗАТЕЛЬНО сохраните код и НИКОМУ его не передавайте — ни вторым, ни третьим лицам. Любой, у кого он окажется, сможет войти в ваш аккаунт и сменить пароль.</div>
     <div class="actions"><button class="sec" id="rcClose">Закрыть</button><button class="btn" id="rcCopy">Скопировать</button></div>
   </div>`;
   document.body.appendChild(o);
@@ -1038,7 +1142,9 @@ function connectSocket(){
       if (d.chatId && active && d.chatId !== active.id) return;
       const el = document.getElementById('typing');
       const st = document.getElementById('status');
-      if (el) el.textContent = d.isTyping ? `${d.username} печатает…` : '';
+      if (el) el.innerHTML = d.isTyping
+        ? `<span class="typing-dots"><i></i><i></i><i></i></span>${esc(d.username)} печатает…`
+        : '';
       if (st && !d.isTyping) st.textContent = `${active?.members_count||1} участник(ов)`;
     }
     if (d.type === 'message:edited' || d.type === 'reaction:new') {
