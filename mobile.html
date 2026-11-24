@@ -44,7 +44,7 @@ body{
 }
 button,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
-#app{height:100%;display:flex;flex-direction:column}
+#app{height:100%;display:flex;flex-direction:column;position:relative}
 
 /* ---------- Общие ---------- */
 .card{background:var(--card);border-radius:16px;box-shadow:var(--shadow)}
@@ -340,7 +340,8 @@ html[data-theme="light"] .main::before,html[data-theme="dark"] .main::before{
 .bub{border-color:rgba(255,255,255,calc(var(--glass-hi) * .7))}
 
 /* перелив по кнопкам */
-.btn,.send,.fab{position:relative;overflow:hidden}
+.btn,.send{position:relative;overflow:hidden}
+.fab{overflow:hidden}
 .btn::after,.send::after,.fab::after{
   content:"";position:absolute;top:0;left:-90%;width:45%;height:100%;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
@@ -367,6 +368,51 @@ html[data-theme="amoled"] .composer::before,
 html[data-theme="amoled"] .btn::after,html[data-theme="amoled"] .send::after,html[data-theme="amoled"] .fab::after{display:none!important}
 html[data-theme="amoled"] .switch.on{box-shadow:none}
 @media (prefers-reduced-motion:reduce){.main::before,.btn::after,.send::after,.fab::after{animation:none!important}}
+
+/* светлая тема: яркое цветное стекло */
+html[data-theme="light"]{
+  --glass:rgba(255,255,255,.58);
+  --glass-strong:rgba(255,255,255,.82);
+  --glass-border:rgba(255,255,255,.9);
+  --glass-shadow:0 12px 40px rgba(58,108,178,.18),inset 0 1px 0 rgba(255,255,255,.95);
+  --glass-hi:.6;
+  --glass-blur:blur(30px) saturate(200%) brightness(1.04);
+}
+html[data-theme="light"] body{
+  background:
+    radial-gradient(900px 600px at 0% 0%,#cfe6ff,transparent 55%),
+    radial-gradient(800px 600px at 100% 100%,#e6dbff,transparent 55%),
+    linear-gradient(135deg,#eef6ff,#f7f2ff 50%,#e9f7ff);
+}
+html[data-theme="light"] .topbar,
+html[data-theme="light"] .chat-head,
+html[data-theme="light"] .tabbar,
+html[data-theme="light"] .composer{
+  background:linear-gradient(135deg,rgba(255,255,255,.82),rgba(223,238,255,.62));
+}
+html[data-theme="light"] .card,
+html[data-theme="light"] .sheet,
+html[data-theme="light"] .auth-box{
+  background:linear-gradient(145deg,rgba(255,255,255,.92),rgba(231,241,255,.74));
+}
+html[data-theme="light"] .bub{
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(233,244,255,.78));
+  border-color:rgba(255,255,255,.9);
+  box-shadow:0 6px 18px rgba(60,110,180,.1),inset 0 1px 0 rgba(255,255,255,.95);
+}
+html[data-theme="light"] .inp,
+html[data-theme="light"] .field,
+html[data-theme="light"] .searchbar input,
+html[data-theme="light"] .composer textarea{
+  background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,.5));
+  border-color:rgba(255,255,255,.9);
+}
+html[data-theme="light"] .row.active{background:rgba(79,172,254,.14);border-color:rgba(255,255,255,.7)}
+html[data-theme="light"] .avatar{box-shadow:0 6px 16px rgba(51,144,236,.3),inset 0 1px 0 rgba(255,255,255,.6)}
+html[data-theme="light"] #app{background:transparent}
+
+/* кнопка «+» всегда справа над нижней навигацией */
+.fab{position:absolute!important;right:18px!important;bottom:84px!important;left:auto!important;z-index:5!important}
 </style>
 </head>
 <body>
@@ -527,7 +573,7 @@ function shell(){
     <div class="topbar">
       <div class="avatar sm">${initial(me.username)}</div>
       <div class="title">Chat Manager</div>
-      <button class="iconbtn" id="newBtn">${I.pencil}</button>
+      <button class="iconbtn" id="newBtn">${I.plus}</button>
     </div>
     <div id="content" style="flex:1;display:flex;flex-direction:column;min-height:0;position:relative"></div>
     <div class="tabbar">
@@ -635,7 +681,6 @@ function renderProfile(){
       <div class="settings-row" style="cursor:pointer" id="sessionsRow"><span>${I.devices} Сессии и устройства</span><span class="hint">›</span></div>
       <div class="settings-row" style="border:0;cursor:pointer;color:#e34d4d" id="logoutRow"><span>${I.logout} Выйти из аккаунта</span><span>›</span></div>
     </div>
-    <div class="hint" style="text-align:center;margin-top:16px">Chat Manager · один файл, без установки</div>
   </div>`;
   document.getElementById('themeSw').onclick = () => {
     theme = theme === 'light' ? 'dark' : 'light';
