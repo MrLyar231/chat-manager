@@ -412,7 +412,8 @@ html[data-theme="light"] .avatar{box-shadow:0 6px 16px rgba(51,144,236,.3),inset
 html[data-theme="light"] #app{background:transparent}
 
 /* кнопка «+» всегда справа над нижней навигацией */
-.fab{position:absolute!important;right:18px!important;bottom:84px!important;left:auto!important;z-index:5!important}
+.fab{position:absolute!important;right:18px!important;bottom:84px!important;left:auto!important;z-index:5!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
+.fab svg{width:24px;height:24px}
 </style>
 </head>
 <body>
@@ -573,7 +574,6 @@ function shell(){
     <div class="topbar">
       <div class="avatar sm">${initial(me.username)}</div>
       <div class="title">Chat Manager</div>
-      <button class="iconbtn" id="newBtn">${I.plus}</button>
     </div>
     <div id="content" style="flex:1;display:flex;flex-direction:column;min-height:0;position:relative"></div>
     <div class="tabbar">
@@ -588,7 +588,6 @@ function shell(){
     localStorage.setItem('chat_tab', tab);
     shell();
   });
-  document.getElementById('newBtn').onclick = newChatSheet;
   const fab = document.getElementById('fab');
   if (fab) fab.onclick = newChatSheet;
   if (tab==='chats') renderChats();
