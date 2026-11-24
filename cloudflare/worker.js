@@ -177,6 +177,7 @@ export class ChatRoom extends DurableObject {
     if (path === '/api/me' && method === 'PATCH') return this.updateProfile(user, body);
     if (path === '/api/chats' && method === 'GET') return this.getChats(user);
     if (path === '/api/users' && method === 'GET') return this.searchUsers(user, url.searchParams.get('q'));
+    if (path === '/api/contacts' && method === 'GET') return this.getContacts(user);
     if (path === '/api/sessions' && method === 'GET') return this.getSessions(user);
     if (path === '/api/sessions/revoke' && method === 'POST') return this.revokeSession(user, body);
     if (path === '/api/sessions/revoke-others' && method === 'POST') return this.revokeOthers(user);
@@ -338,6 +339,19 @@ export class ChatRoom extends DurableObject {
       WHERE cm.user_id = ?
       ORDER BY COALESCE((SELECT MAX(id) FROM messages WHERE chat_id = c.id), 0) DESC
     `, user.id, user.id).toArray());
+  }
+
+  getContacts(user) {
+    return json(this.sql.exec(`
+      SELECT DISTINCT u.id, u.username, u.display_name, u.bio, u.avatar_color
+      FROM chats c
+      JOIN chat_members me ON me.chat_id = c.id AND me.user_id = ?
+      JOIN chat_members other ON other.chat_id = c.id AND other.user_id != ?
+      JOIN users u ON u.id = other.user_id
+      WHERE c.is_group = 0
+        AND EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id AND m.user_id = ?)
+      ORDER BY u.username
+    `, user.id, user.id, user.id).toArray());
   }
 
   searchUsers(user, query) {

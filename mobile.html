@@ -932,9 +932,8 @@ function newChatSheet(){
   o.innerHTML = `<div class="sheet">
     <h3>Новый чат</h3>
     <input class="inp" id="nm" placeholder="Название чата" maxlength="40">
-    <div class="sub">Поиск участников</div>
-    <input class="inp" id="peopleQ" placeholder="@юзернейм" autocomplete="off">
-    <div id="pick"><div class="hint" style="margin-top:8px">Введите минимум 2 символа</div></div>
+    <div class="sub">Люди, которым вы уже писали</div>
+    <div id="pick"><div class="hint" style="margin-top:8px">загрузка...</div></div>
     <div class="actions"><button class="sec" id="cancel">Отмена</button><button class="btn" id="create">Создать</button></div>
   </div>`;
   document.body.appendChild(o);
@@ -942,24 +941,15 @@ function newChatSheet(){
   document.getElementById('cancel').onclick = () => o.remove();
 
   const pick = o.querySelector('#pick');
-  let timer = null;
-  o.querySelector('#peopleQ').oninput = e => {
-    clearTimeout(timer);
-    const q = e.target.value.trim();
-    timer = setTimeout(async () => {
-      if (q.replace(/^@/, '').length < 2) {
-        pick.innerHTML = '<div class="hint" style="margin-top:8px">Введите минимум 2 символа</div>';
-        return;
-      }
-      pick.innerHTML = '<div class="hint" style="margin-top:8px">Ищем...</div>';
-      try {
-        const list = await api('/users?q=' + encodeURIComponent(q));
-        pick.innerHTML = list.length
-          ? list.map(u => `<label><input type="checkbox" value="${u.id}"><div class="avatar sm">${initial(u.username)}</div>@${esc(u.username)} ${online.includes(u.id)?'🟢':''}</label>`).join('')
-          : '<div class="hint" style="margin-top:8px">Никого не найдено</div>';
-      } catch(err) { pick.innerHTML = `<div class="hint">${esc(err.message)}</div>`; }
-    }, 250);
-  };
+  api('/contacts').then(list => {
+    pick.innerHTML = list.length
+      ? list.map(u => `<label>
+          <input type="checkbox" value="${u.id}">
+          <div class="avatar sm" style="background:${esc(u.avatar_color||'#4fa8f5')}">${initial(u.display_name||u.username)}${online.includes(u.id)?'<span class="dot"></span>':''}</div>
+          <span>${esc(u.display_name||u.username)} <span class="hint">@${esc(u.username)}</span></span>
+        </label>`).join('')
+      : '<div class="hint" style="margin-top:8px">Вы ещё никому не писали. Начните переписку — и человек появится здесь.</div>';
+  }).catch(err => { pick.innerHTML = `<div class="hint">${esc(err.message)}</div>`; });
 
   o.querySelector('#create').onclick = async () => {
     const name = o.querySelector('#nm').value.trim();
