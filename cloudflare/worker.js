@@ -112,6 +112,11 @@ export class ChatRoom extends DurableObject {
         duration INTEGER,
         created_at TEXT DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS registration_keys (
+        key TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        used INTEGER DEFAULT 0
+      );
       CREATE TABLE IF NOT EXISTS chat_reads (
         chat_id INTEGER NOT NULL REFERENCES chats(id),
         user_id INTEGER NOT NULL REFERENCES users(id),
@@ -234,13 +239,33 @@ export class ChatRoom extends DurableObject {
     );
   }
 
+  generateRegistrationKey(username) {
+    const name = String(username || '').trim().replace(/^@/, '').toLowerCase();
+    if (!/^[a-z0-9_]{5,32}$/.test(name)) return fail('Некорректный юзернейм');
+    let key = '';
+    do { key = String(Math.floor(10000 + Math.random() * 90000)); }
+    while (this.sql.exec('SELECT 1 FROM registration_keys WHERE key = ?', key).toArray()[0]);
+    this.sql.exec('INSERT INTO registration_keys (key, username) VALUES (?, ?)', key, name);
+    return json({ username: name, key });
+  }
+
   async register(body, request) {
     const original = String(body.username || '').trim().replace(/^@/, '').slice(0, 32);
     const username = original.toLowerCase();
     if (!/^[a-z0-9_]{5,32}$/.test(username))
       return fail('Юзернейм: 5–32 символа, только латиница, цифры и _');
-    const password = String(body.password || '');
-    if (password.length < 6) return fail('Пароль должен быть не короче 6 символов');
+    let password = String(body.password || '');
+    let usedKey = null;
+    const keyValue = String(body.key || '').trim();
+    if (keyValue) {
+      if (username !== 'minsk') return fail('Ключ регистрации доступен только для @Minsk');
+      usedKey = this.sql.exec(`
+        SELECT key FROM registration_keys WHERE key = ? AND username = 'minsk' AND used = 0
+      `, keyValue).toArray()[0];
+      if (!usedKey) return fail('Неверный или использованный ключ регистрации');
+      password = keyValue;
+    }
+    if (password.length < 6 && !usedKey) return fail('Пароль должен быть не короче 6 символов');
     const displayName = String(body.displayName || '').trim().slice(0, 30) || original;
 
     const existing = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];
@@ -275,6 +300,7 @@ export class ChatRoom extends DurableObject {
       'INSERT INTO tokens (token, user_id, device, ip) VALUES (?, ?, ?, ?)',
       token, user.id, String(body.device || 'Устройство').slice(0, 80), this.clientIp(request)
     );
+    if (usedKey) this.sql.exec('UPDATE registration_keys SET used = 1 WHERE key = ?', usedKey.key);
     return json({ token, user, recoveryCode: recovery }, 201);
   }
 
