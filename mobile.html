@@ -358,6 +358,17 @@ html[data-theme="light"] .main::before,html[data-theme="dark"] .main::before{
 .switch{box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
 .switch.on{box-shadow:0 0 14px rgba(51,144,236,.55),inset 0 1px 0 rgba(255,255,255,.4)}
 
+/* Исправление Android WebView: вложенное размытие ломает модальные окна */
+.sheet{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+  background:var(--card)!important;
+  box-shadow:0 -8px 34px rgba(0,0,0,.28)!important;
+}
+html[data-theme="light"] .sheet{background:#fff!important}
+html[data-theme="dark"] .sheet{background:#1e242b!important}
+html[data-theme="amoled"] .sheet{background:#000!important}
+
 /* AMOLED: ничего не светим и не размываем */
 html[data-theme="amoled"] .main::before,
 html[data-theme="amoled"] .card::before,html[data-theme="amoled"] .card::after,
