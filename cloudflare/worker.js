@@ -228,6 +228,7 @@ export class ChatRoom extends DurableObject {
       return fail('Юзернейм: 5–32 символа, только латиница, цифры и _');
     const password = String(body.password || '');
     if (password.length < 6) return fail('Пароль должен быть не короче 6 символов');
+    const displayName = String(body.displayName || '').trim().slice(0, 30) || original;
 
     const existing = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];
     if (existing && existing.password_hash) return fail('Этот юзернейм уже занят');
@@ -242,7 +243,7 @@ export class ChatRoom extends DurableObject {
     } else {
       user = this.sql.exec(
         'INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color, recovery_code',
-        original, username, hash, original, '', '#4fa8f5', recovery
+        original, username, hash, displayName, '', '#4fa8f5', recovery
       ).toArray()[0];
     }
     this.sql.exec('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', this.generalId, user.id);
@@ -454,8 +455,8 @@ export class ChatRoom extends DurableObject {
   }
 
   updateProfile(user, body) {
-    const name = String(body.displayName ?? '').trim().slice(0, 40);
-    const bio = String(body.bio ?? '').trim().slice(0, 160);
+    const name = String(body.displayName ?? '').trim().slice(0, 30);
+    const bio = String(body.bio ?? '').trim().slice(0, 50);
     const color = /^#[0-9a-fA-F]{6}$/.test(body.avatarColor || '') ? body.avatarColor : user.avatar_color;
     this.sql.exec('UPDATE users SET display_name = ?, bio = ?, avatar_color = ? WHERE id = ?',
       name || user.username, bio, color, user.id);
