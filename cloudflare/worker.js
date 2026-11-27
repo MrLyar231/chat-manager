@@ -64,6 +64,7 @@ export class ChatRoom extends DurableObject {
         bio TEXT,
         avatar_color TEXT,
         recovery_code TEXT,
+        avatar TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS tokens (
@@ -103,6 +104,9 @@ export class ChatRoom extends DurableObject {
         reactions TEXT,
         edited INTEGER DEFAULT 0,
         deleted INTEGER DEFAULT 0,
+        media TEXT,
+        media_type TEXT,
+        duration INTEGER,
         created_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS chat_reads (
@@ -115,9 +119,10 @@ export class ChatRoom extends DurableObject {
     // Миграции для старых баз
     for (const [table, col, def] of [
       ['users', 'display_name', 'TEXT'], ['users', 'bio', 'TEXT'], ['users', 'avatar_color', 'TEXT'],
-      ['users', 'recovery_code', 'TEXT'], ['users', 'username_key', 'TEXT'],
+      ['users', 'recovery_code', 'TEXT'], ['users', 'username_key', 'TEXT'], ['users', 'avatar', 'TEXT'],
       ['messages', 'reply_to', 'INTEGER'], ['messages', 'reactions', 'TEXT'],
       ['messages', 'edited', 'INTEGER DEFAULT 0'], ['messages', 'deleted', 'INTEGER DEFAULT 0'],
+      ['messages', 'media', 'TEXT'], ['messages', 'media_type', 'TEXT'], ['messages', 'duration', 'INTEGER'],
     ]) {
       const cols = this.sql.exec(`PRAGMA table_info(${table})`).toArray();
       if (!cols.some((c) => c.name === col)) this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
@@ -132,7 +137,7 @@ export class ChatRoom extends DurableObject {
   userByToken(token) {
     if (!token) return null;
     return this.sql.exec(`
-      SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color FROM tokens t
+      SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color, u.avatar FROM tokens t
       JOIN users u ON u.id = t.user_id WHERE t.token = ?
     `, token).toArray()[0] || null;
   }
@@ -238,11 +243,11 @@ export class ChatRoom extends DurableObject {
     let user;
     if (existing) {
       this.sql.exec('UPDATE users SET password_hash = ?, recovery_code = COALESCE(recovery_code, ?) WHERE id = ?', hash, recovery, existing.id);
-      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color, recovery_code FROM users WHERE id = ?', existing.id).toArray()[0];
+      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color, recovery_code, avatar FROM users WHERE id = ?', existing.id).toArray()[0];
       recovery = user.recovery_code;
     } else {
       user = this.sql.exec(
-        'INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, username, display_name, bio, avatar_color, recovery_code',
+        'INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, NULL) RETURNING id, username, display_name, bio, avatar_color, recovery_code, avatar',
         original, username, hash, displayName, '', '#4fa8f5', recovery
       ).toArray()[0];
     }
@@ -268,6 +273,7 @@ export class ChatRoom extends DurableObject {
     return json({ token, user: {
       id: user.id, username: user.username,
       display_name: user.display_name, bio: user.bio, avatar_color: user.avatar_color,
+      avatar: user.avatar || null,
     } });
   }
 
@@ -321,7 +327,7 @@ export class ChatRoom extends DurableObject {
     return json({
       chat: { id: chatId, name: chat.name, is_group: chat.is_group },
       members: this.sql.exec(`
-        SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color
+        SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color, u.avatar
         FROM chat_members cm JOIN users u ON u.id = cm.user_id
         WHERE cm.chat_id = ? ORDER BY u.username
       `, chatId).toArray(),
@@ -359,7 +365,7 @@ export class ChatRoom extends DurableObject {
     const q = String(query || '').trim().replace(/^@/, '').toLowerCase().slice(0, 32);
     if (q.length < 2) return json([]);
     return json(this.sql.exec(`
-      SELECT id, username, display_name, bio, avatar_color FROM users
+      SELECT id, username, display_name, bio, avatar_color, avatar FROM users
       WHERE id != ? AND username_key LIKE ?
       ORDER BY username LIMIT 20
     `, user.id, `%${q}%`).toArray());
@@ -408,6 +414,7 @@ export class ChatRoom extends DurableObject {
   msgSelect(chatId, where = '', params = []) {
     return this.sql.exec(`
       SELECT m.id, m.chat_id, m.text, m.created_at, m.reply_to, m.reactions, m.edited, m.deleted,
+        m.media, m.media_type, m.duration,
         u.id AS user_id, u.username, u.display_name, u.avatar_color,
         r.text AS reply_text, ru.username AS reply_username
       FROM messages m
@@ -428,7 +435,15 @@ export class ChatRoom extends DurableObject {
 
   postMessage(user, chatId, body) {
     const text = String(body.text || '').trim().slice(0, 2000);
-    if (!text) return fail('Пустое сообщение');
+    let media = null;
+    if (body.media && typeof body.media === 'object') {
+      const data = String(body.media.data || '');
+      const type = String(body.media.type || '');
+      if (/^data:(image|video)\//.test(data) && data.length < 6000000) {
+        media = { data, type, duration: Number(body.media.duration) || 0 };
+      }
+    }
+    if (!text && !media) return fail('Пустое сообщение');
     const member = this.sql.exec('SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?', chatId, user.id).toArray()[0];
     if (!member) return fail('Вы не участник этого чата', 403);
     let replyTo = Number(body.replyTo) || null;
@@ -437,12 +452,14 @@ export class ChatRoom extends DurableObject {
       if (!orig || orig.chat_id !== chatId) replyTo = null;
     }
     const msg = this.sql.exec(`
-      INSERT INTO messages (chat_id, user_id, text, reply_to) VALUES (?, ?, ?, ?)
-      RETURNING id, chat_id, user_id, text, reply_to, created_at
-    `, chatId, user.id, text, replyTo).toArray()[0];
+      INSERT INTO messages (chat_id, user_id, text, reply_to, media, media_type, duration)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      RETURNING id, chat_id, user_id, text, reply_to, media, media_type, duration, created_at
+    `, chatId, user.id, text, replyTo, media?.data || null, media?.type || null, media?.duration || 0).toArray()[0];
     msg.username = user.username;
     msg.display_name = user.display_name;
     msg.avatar_color = user.avatar_color;
+    msg.avatar = user.avatar || null;
     if (replyTo) {
       const r = this.sql.exec(`
         SELECT m.text AS reply_text, u.username AS reply_username
@@ -458,9 +475,14 @@ export class ChatRoom extends DurableObject {
     const name = String(body.displayName ?? '').trim().slice(0, 30);
     const bio = String(body.bio ?? '').trim().slice(0, 50);
     const color = /^#[0-9a-fA-F]{6}$/.test(body.avatarColor || '') ? body.avatarColor : user.avatar_color;
-    this.sql.exec('UPDATE users SET display_name = ?, bio = ?, avatar_color = ? WHERE id = ?',
-      name || user.username, bio, color, user.id);
-    const updated = this.sql.exec('SELECT id, username, display_name, bio, avatar_color FROM users WHERE id = ?', user.id).toArray()[0];
+    let avatar = user.avatar || null;
+    if (body.avatar === null || body.avatar === '') avatar = null;
+    else if (typeof body.avatar === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(body.avatar) && body.avatar.length < 220000) {
+      avatar = body.avatar;
+    }
+    this.sql.exec('UPDATE users SET display_name = ?, bio = ?, avatar_color = ?, avatar = ? WHERE id = ?',
+      name || user.username, bio, color, avatar, user.id);
+    const updated = this.sql.exec('SELECT id, username, display_name, bio, avatar_color, avatar FROM users WHERE id = ?', user.id).toArray()[0];
     this.broadcast({ type: 'profile:updated', user: updated });
     return json(updated);
   }
