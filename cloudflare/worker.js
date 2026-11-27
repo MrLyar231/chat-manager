@@ -254,18 +254,18 @@ export class ChatRoom extends DurableObject {
     const username = original.toLowerCase();
     if (!/^[a-z0-9_]{5,32}$/.test(username))
       return fail('Юзернейм: 5–32 символа, только латиница, цифры и _');
-    let password = String(body.password || '');
+    const password = String(body.password || '');
+    if (password.length < 6) return fail('Пароль должен быть не короче 6 символов');
+    const RESERVED = ['minsk'];
     let usedKey = null;
     const keyValue = String(body.key || '').trim();
-    if (keyValue) {
-      if (username !== 'minsk') return fail('Ключ регистрации доступен только для @Minsk');
+    if (RESERVED.includes(username)) {
+      if (!keyValue) return fail('Для этого юзернейма нужен ключ регистрации');
       usedKey = this.sql.exec(`
-        SELECT key FROM registration_keys WHERE key = ? AND username = 'minsk' AND used = 0
-      `, keyValue).toArray()[0];
+        SELECT key FROM registration_keys WHERE key = ? AND username = ? AND used = 0
+      `, keyValue, username).toArray()[0];
       if (!usedKey) return fail('Неверный или использованный ключ регистрации');
-      password = keyValue;
     }
-    if (password.length < 6 && !usedKey) return fail('Пароль должен быть не короче 6 символов');
     const displayName = String(body.displayName || '').trim().slice(0, 30) || original;
 
     const existing = this.sql.exec('SELECT * FROM users WHERE username_key = ?', username).toArray()[0];

@@ -620,7 +620,8 @@ function authScreen(err = ''){
     </div>
     ${authMode==='register' ? `<div class="field"><input id="nick" placeholder="Никнейм (до 30 символов)" maxlength="30" value="${esc(pendingNick)}"></div>` : ''}
     <div class="field"><span>@</span><input id="u" placeholder="юзернейм" autocomplete="username" maxlength="32" value="${esc(pendingUser)}"></div>
-    ${authMode==='register' ? `<div class="field" id="rkeyField" style="display:${pendingUser.trim().toLowerCase().replace(/^@/,'')==='minsk'?'flex':'none'}"><input id="rkey" placeholder="Ключ регистрации (5 цифр)" maxlength="5" inputmode="numeric"></div>` : ''}
+    ${authMode==='register' ? `<div class="field" id="rkeyField" style="display:${pendingUser.trim().toLowerCase().replace(/^@/,'')==='minsk'?'flex':'none'}"><input id="rkey" placeholder="Ключ регистрации (5 цифр)" maxlength="5" inputmode="numeric"></div>
+    <div class="hint" id="rkeyHint" style="margin:-4px 0 10px;display:${pendingUser.trim().toLowerCase().replace(/^@/,'')==='minsk'?'block':'none'}">Ключ нужен только при регистрации. Для входа используйте юзернейм и пароль.</div>` : ''}
     <div class="field"><input id="p" type="${showPass?'text':'password'}" placeholder="Пароль (от 6 символов)" autocomplete="current-password" value="${esc(pendingPass)}"><button type="button" class="eye" id="eye">${showPass?'🙈':'👁'}</button></div>
     ${authMode==='register' ? '<div class="field"><input id="p2" type="password" placeholder="Повторите пароль" autocomplete="new-password"></div>' : ''}
     <div class="hint" style="margin:2px 0 6px">5–32 символа: латиница, цифры, _</div>
@@ -638,8 +639,11 @@ function authScreen(err = ''){
   if (forgot) forgot.onclick = () => recoverySheet();
   const userInput = document.getElementById('u');
   const keyField = document.getElementById('rkeyField');
+  const keyHint = document.getElementById('rkeyHint');
   if (userInput && keyField) userInput.oninput = () => {
-    keyField.style.display = userInput.value.trim().toLowerCase().replace(/^@/, '') === 'minsk' ? 'flex' : 'none';
+    const show = userInput.value.trim().toLowerCase().replace(/^@/, '') === 'minsk' ? 'block' : 'none';
+    keyField.style.display = show === 'block' ? 'flex' : 'none';
+    if (keyHint) keyHint.style.display = show;
   };
   document.getElementById('authForm').onsubmit = async e => {
     e.preventDefault();
@@ -647,9 +651,8 @@ function authScreen(err = ''){
     const password = document.getElementById('p').value;
     const displayName = document.getElementById('nick')?.value.trim() || '';
     const regKey = document.getElementById('rkey')?.value.trim() || '';
-    if (authMode === 'register' && regKey) password = regKey;
     pendingUser = username; pendingPass = password; pendingNick = displayName;
-    if (authMode==='register' && !regKey && password !== document.getElementById('p2').value)
+    if (authMode==='register' && password !== document.getElementById('p2').value)
       return authScreen('Пароли не совпадают');
     if (authMode==='register' && !displayName)
       return authScreen('Укажите никнейм');
