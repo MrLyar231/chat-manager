@@ -65,6 +65,9 @@ export class ChatRoom extends DurableObject {
         avatar_color TEXT,
         recovery_code TEXT,
         avatar TEXT,
+        public_key TEXT,
+        encrypted_private_key TEXT,
+        key_salt TEXT,
         created_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS tokens (
@@ -120,6 +123,7 @@ export class ChatRoom extends DurableObject {
     for (const [table, col, def] of [
       ['users', 'display_name', 'TEXT'], ['users', 'bio', 'TEXT'], ['users', 'avatar_color', 'TEXT'],
       ['users', 'recovery_code', 'TEXT'], ['users', 'username_key', 'TEXT'], ['users', 'avatar', 'TEXT'],
+      ['users', 'public_key', 'TEXT'], ['users', 'encrypted_private_key', 'TEXT'], ['users', 'key_salt', 'TEXT'],
       ['messages', 'reply_to', 'INTEGER'], ['messages', 'reactions', 'TEXT'],
       ['messages', 'edited', 'INTEGER DEFAULT 0'], ['messages', 'deleted', 'INTEGER DEFAULT 0'],
       ['messages', 'media', 'TEXT'], ['messages', 'media_type', 'TEXT'], ['messages', 'duration', 'INTEGER'],
@@ -137,7 +141,9 @@ export class ChatRoom extends DurableObject {
   userByToken(token) {
     if (!token) return null;
     return this.sql.exec(`
-      SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color, u.avatar FROM tokens t
+      SELECT u.id, u.username, u.display_name, u.bio, u.avatar_color, u.avatar,
+        u.public_key, u.encrypted_private_key, u.key_salt
+      FROM tokens t
       JOIN users u ON u.id = t.user_id WHERE t.token = ?
     `, token).toArray()[0] || null;
   }
@@ -180,6 +186,8 @@ export class ChatRoom extends DurableObject {
     if (path === '/api/recovery-code' && method === 'GET') return this.getRecoveryCode(user);
     if (path === '/api/me' && method === 'GET') return json(user);
     if (path === '/api/me' && method === 'PATCH') return this.updateProfile(user, body);
+    if (path === '/api/username' && method === 'POST') return this.changeUsername(user, body);
+    if (path === '/api/keys' && method === 'POST') return this.saveKeys(user, body);
     if (path === '/api/chats' && method === 'GET') return this.getChats(user);
     if (path === '/api/users' && method === 'GET') return this.searchUsers(user, url.searchParams.get('q'));
     if (path === '/api/contacts' && method === 'GET') return this.getContacts(user);
@@ -240,15 +248,25 @@ export class ChatRoom extends DurableObject {
 
     const hash = await hashPassword(password);
     let recovery = newRecoveryCode();
+    const pub = String(body.publicKey || '').slice(0, 2000);
+    const priv = String(body.encryptedPrivateKey || '').slice(0, 4000);
+    const salt = String(body.keySalt || '').slice(0, 64);
     let user;
     if (existing) {
-      this.sql.exec('UPDATE users SET password_hash = ?, recovery_code = COALESCE(recovery_code, ?) WHERE id = ?', hash, recovery, existing.id);
-      user = this.sql.exec('SELECT id, username, display_name, bio, avatar_color, recovery_code, avatar FROM users WHERE id = ?', existing.id).toArray()[0];
+      this.sql.exec(`UPDATE users SET password_hash = ?, recovery_code = COALESCE(recovery_code, ?),
+        public_key = COALESCE(?, public_key), encrypted_private_key = COALESCE(?, encrypted_private_key),
+        key_salt = COALESCE(?, key_salt) WHERE id = ?`, hash, recovery, pub || null, priv || null, salt || null, existing.id);
+      user = this.sql.exec(`SELECT id, username, display_name, bio, avatar_color, recovery_code, avatar,
+        public_key, encrypted_private_key, key_salt FROM users WHERE id = ?`, existing.id).toArray()[0];
       recovery = user.recovery_code;
     } else {
       user = this.sql.exec(
-        'INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, NULL) RETURNING id, username, display_name, bio, avatar_color, recovery_code, avatar',
-        original, username, hash, displayName, '', '#4fa8f5', recovery
+        `INSERT INTO users (username, username_key, password_hash, display_name, bio, avatar_color, recovery_code, avatar,
+          public_key, encrypted_private_key, key_salt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+         RETURNING id, username, display_name, bio, avatar_color, recovery_code, avatar,
+          public_key, encrypted_private_key, key_salt`,
+        original, username, hash, displayName, '', '#4fa8f5', recovery, pub || null, priv || null, salt || null
       ).toArray()[0];
     }
     this.sql.exec('INSERT OR IGNORE INTO chat_members (chat_id, user_id) VALUES (?, ?)', this.generalId, user.id);
@@ -274,6 +292,9 @@ export class ChatRoom extends DurableObject {
       id: user.id, username: user.username,
       display_name: user.display_name, bio: user.bio, avatar_color: user.avatar_color,
       avatar: user.avatar || null,
+      public_key: user.public_key || null,
+      encrypted_private_key: user.encrypted_private_key || null,
+      key_salt: user.key_salt || null,
     } });
   }
 
@@ -341,11 +362,13 @@ export class ChatRoom extends DurableObject {
         (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) AS last_time,
         (SELECT COUNT(*) FROM chat_members WHERE chat_id = c.id) AS members_count,
         COALESCE((SELECT MAX(id) FROM messages WHERE chat_id = c.id), 0) AS last_id,
-        COALESCE((SELECT last_message_id FROM chat_reads WHERE chat_id = c.id AND user_id = ?), 0) AS read_id
+        COALESCE((SELECT last_message_id FROM chat_reads WHERE chat_id = c.id AND user_id = ?), 0) AS read_id,
+        (SELECT u2.public_key FROM chat_members cm2 JOIN users u2 ON u2.id = cm2.user_id
+          WHERE cm2.chat_id = c.id AND cm2.user_id != ? LIMIT 1) AS peer_public_key
       FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
       WHERE cm.user_id = ?
       ORDER BY COALESCE((SELECT MAX(id) FROM messages WHERE chat_id = c.id), 0) DESC
-    `, user.id, user.id).toArray());
+    `, user.id, user.id, user.id).toArray());
   }
 
   getContacts(user) {
@@ -415,7 +438,7 @@ export class ChatRoom extends DurableObject {
     return this.sql.exec(`
       SELECT m.id, m.chat_id, m.text, m.created_at, m.reply_to, m.reactions, m.edited, m.deleted,
         m.media, m.media_type, m.duration,
-        u.id AS user_id, u.username, u.display_name, u.avatar_color,
+        u.id AS user_id, u.username, u.display_name, u.avatar_color, u.public_key AS user_public_key,
         r.text AS reply_text, ru.username AS reply_username
       FROM messages m
       JOIN users u ON u.id = m.user_id
@@ -460,6 +483,7 @@ export class ChatRoom extends DurableObject {
     msg.display_name = user.display_name;
     msg.avatar_color = user.avatar_color;
     msg.avatar = user.avatar || null;
+    msg.user_public_key = user.public_key || null;
     if (replyTo) {
       const r = this.sql.exec(`
         SELECT m.text AS reply_text, u.username AS reply_username
@@ -469,6 +493,48 @@ export class ChatRoom extends DurableObject {
     }
     this.broadcast({ type: 'message:new', message: msg });
     return json(msg, 201);
+  }
+
+  saveKeys(user, body) {
+    const pub = String(body.publicKey || '').slice(0, 2000);
+    const priv = String(body.encryptedPrivateKey || '').slice(0, 4000);
+    const salt = String(body.keySalt || '').slice(0, 64);
+    if (!pub || !priv || !salt) return fail('Некорректные ключи');
+    this.sql.exec('UPDATE users SET public_key = ?, encrypted_private_key = ?, key_salt = ? WHERE id = ?',
+      pub, priv, salt, user.id);
+    const updated = this.sql.exec(`
+      SELECT id, username, display_name, bio, avatar_color, avatar, public_key, encrypted_private_key, key_salt
+      FROM users WHERE id = ?`, user.id).toArray()[0];
+    this.broadcast({ type: 'profile:updated', user: updated });
+    return json(updated);
+  }
+
+  changeUsername(user, body) {
+    const next = String(body.username || '').trim().replace(/^@/, '');
+    const key = next.toLowerCase().slice(0, 32);
+    if (!/^[a-z0-9_]{5,32}$/.test(key))
+      return fail('Юзернейм: 5–32 символа, латиница, цифры и _');
+    const taken = this.sql.exec('SELECT id FROM users WHERE username_key = ? AND id != ?', key, user.id).toArray()[0];
+    if (taken) return fail('Этот юзернейм уже занят');
+
+    const oldName = user.username;
+    this.sql.exec('UPDATE users SET username = ?, username_key = ? WHERE id = ?', next, key, user.id);
+    // Переименовываем личные чаты вида @юзернейм
+    const privateChats = this.sql.exec(`
+      SELECT c.id, c.name FROM chats c
+      JOIN chat_members cm ON cm.chat_id = c.id
+      WHERE cm.user_id = ? AND c.is_group = 0
+    `, user.id).toArray();
+    for (const c of privateChats) {
+      if (c.name === '@' + oldName) this.sql.exec('UPDATE chats SET name = ? WHERE id = ?', '@' + next, c.id);
+    }
+
+    const updated = this.sql.exec(`
+      SELECT id, username, display_name, bio, avatar_color, avatar, public_key, encrypted_private_key, key_salt
+      FROM users WHERE id = ?
+    `, user.id).toArray()[0];
+    this.broadcast({ type: 'profile:updated', user: updated });
+    return json(updated);
   }
 
   updateProfile(user, body) {
